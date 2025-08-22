@@ -1,30 +1,32 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
+// test/widget_test.dart
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
 import 'package:tutorium_frontend/main.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
+  testWidgets('App shows HomePage initially and can navigate', (WidgetTester tester) async {
+    // 1. Build the app and trigger a frame.
     await tester.pumpWidget(const MyApp());
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    // 2. Verify that the HomePage is visible.
+    // We look for a 'Home' Text widget that is a descendant of an AppBar.
+    expect(find.descendant(of: find.byType(AppBar), matching: find.text('Home')), findsOneWidget);
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
+    // This check is still good because "Home Page" is unique.
+    expect(find.text('Home Page'), findsOneWidget);
+
+    // 3. Verify that the SearchPage is not visible.
+    expect(find.text('Search Page'), findsNothing);
+
+    // 4. Find the 'Search' icon in the bottom navigation bar and tap it.
+    await tester.tap(find.byIcon(Icons.search));
+
+    // 5. Rebuild the widget tree after the tap.
     await tester.pump();
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    // 6. Verify that navigation was successful.
+    expect(find.text('Search Page'), findsOneWidget);
+    expect(find.text('Home Page'), findsNothing);
   });
 }
