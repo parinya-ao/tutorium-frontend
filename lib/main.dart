@@ -8,6 +8,7 @@ import 'package:tutorium_frontend/pages/login/login_ku.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // NotiService().initNotification();
+
   await dotenv.load(fileName: ".env");
   runApp(const MyApp());
 }
