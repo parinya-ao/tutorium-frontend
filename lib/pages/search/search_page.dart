@@ -1,6 +1,39 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:tutorium_frontend/pages/widgets/schedule_card_search.dart';
 import 'package:tutorium_frontend/pages/widgets/search_service.dart';
+
+class _MaxValueTextInputFormatter extends TextInputFormatter {
+  _MaxValueTextInputFormatter(this.maxValue);
+
+  final double maxValue;
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final text = newValue.text;
+    if (text.isEmpty) {
+      return newValue;
+    }
+
+    if (text == '.') {
+      return newValue;
+    }
+
+    final value = double.tryParse(text);
+    if (value == null) {
+      return oldValue;
+    }
+
+    if (value > maxValue) {
+      return oldValue;
+    }
+
+    return newValue;
+  }
+}
 
 class SearchPage extends StatefulWidget {
   const SearchPage({super.key});
@@ -20,6 +53,51 @@ class _SearchPageState extends State<SearchPage> {
   double? minRating;
   double? maxRating;
   bool isFilterActive = false;
+
+  bool get _hasActiveCategoryFilter =>
+      selectedCategories.any((category) => category != 'All');
+
+  bool get _hasActiveFilters =>
+      _hasActiveCategoryFilter || minRating != null || maxRating != null;
+
+  List<String> get _categoryFilters =>
+      selectedCategories.where((category) => category != 'All').toList();
+
+  void _refreshFilterActiveState() {
+    isFilterActive = _hasActiveFilters;
+  }
+
+  void _toggleCategorySelection(String category, bool shouldSelect) {
+    if (category == 'All') {
+      if (shouldSelect) {
+        selectedCategories
+          ..clear()
+          ..add('All');
+      } else {
+        selectedCategories.remove('All');
+      }
+    } else {
+      if (shouldSelect) {
+        selectedCategories.remove('All');
+        if (!selectedCategories.contains(category)) {
+          selectedCategories.add(category);
+        }
+      } else {
+        selectedCategories.remove(category);
+      }
+    }
+    _refreshFilterActiveState();
+  }
+
+  void _setMinRating(double? value) {
+    minRating = value;
+    _refreshFilterActiveState();
+  }
+
+  void _setMaxRating(double? value) {
+    maxRating = value;
+    _refreshFilterActiveState();
+  }
 
   final List<Map<String, dynamic>> scheduleData = [
     {
@@ -81,26 +159,29 @@ class _SearchPageState extends State<SearchPage> {
   }
 
   Future<void> _search(String query) async {
+    final normalizedQuery = query.trim();
+
     setState(() {
-      currentQuery = query;
+      currentQuery = normalizedQuery;
     });
 
     if (!isFilterActive) {
       setState(() {
-        _filteredClasses = api.searchLocal(_allClasses, query);
+        _filteredClasses = api.searchLocal(_allClasses, normalizedQuery);
       });
       return;
     }
 
     setState(() => isLoading = true);
     try {
+      final categoryFilters = _categoryFilters;
       final data = await api.filterClasses(
-        categories: selectedCategories.isNotEmpty ? selectedCategories : null,
+        categories: categoryFilters.isNotEmpty ? categoryFilters : null,
         minRating: minRating,
         maxRating: maxRating,
       );
 
-      final searched = api.searchLocal(data, query);
+      final searched = api.searchLocal(data, normalizedQuery);
       setState(() => _filteredClasses = searched);
     } catch (e) {
       ScaffoldMessenger.of(
@@ -112,17 +193,29 @@ class _SearchPageState extends State<SearchPage> {
   }
 
   void _onSearchChanged(String query) {
+    final normalizedQuery = query.trim();
+    final isWhitespaceOnly = normalizedQuery.isEmpty && query.isNotEmpty;
+
+    if (isWhitespaceOnly) {
+      setState(() {
+        currentQuery = '';
+        _filteredClasses = [];
+      });
+      return;
+    }
+
     setState(() {
-      currentQuery = query;
+      currentQuery = normalizedQuery;
     });
 
-    if (query.isEmpty && !isFilterActive) {
+    if (normalizedQuery.isEmpty && !isFilterActive) {
       setState(() {
         _filteredClasses = api.searchLocal(_allClasses, "");
       });
       return;
     }
-    _search(query);
+
+    _search(normalizedQuery);
   }
 
   void _showFilterOptions() {
@@ -150,6 +243,13 @@ class _SearchPageState extends State<SearchPage> {
       builder: (BuildContext context) {
         return StatefulBuilder(
           builder: (BuildContext context, StateSetter setModalState) {
+            void updateFilters(VoidCallback updates) {
+              setModalState(() {
+                updates();
+              });
+              setState(() {});
+            }
+
             return Container(
               padding: EdgeInsets.all(16),
               child: Column(
@@ -168,11 +268,10 @@ class _SearchPageState extends State<SearchPage> {
                       ),
                       TextButton(
                         onPressed: () {
-                          setModalState(() {
+                          updateFilters(() {
                             selectedCategories.clear();
-                            minRating = null;
-                            maxRating = null;
-                            isFilterActive = false;
+                            _setMinRating(null);
+                            _setMaxRating(null);
                             minRatingController.clear();
                             maxRatingController.clear();
                           });
@@ -195,13 +294,8 @@ class _SearchPageState extends State<SearchPage> {
                         label: Text(category),
                         selected: isSelected,
                         onSelected: (selected) {
-                          setModalState(() {
-                            if (selected) {
-                              selectedCategories.add(category);
-                            } else {
-                              selectedCategories.remove(category);
-                            }
-                            isFilterActive = true;
+                          updateFilters(() {
+                            _toggleCategorySelection(category, selected);
                           });
                         },
                       );
@@ -229,10 +323,15 @@ class _SearchPageState extends State<SearchPage> {
                           keyboardType: TextInputType.numberWithOptions(
                             decimal: true,
                           ),
+                          inputFormatters: [
+                            FilteringTextInputFormatter.allow(
+                              RegExp(r'[0-9.]'),
+                            ),
+                            _MaxValueTextInputFormatter(5),
+                          ],
                           onChanged: (value) {
-                            setModalState(() {
-                              minRating = double.tryParse(value);
-                              isFilterActive = true;
+                            updateFilters(() {
+                              _setMinRating(double.tryParse(value));
                             });
                           },
                         ),
@@ -252,10 +351,15 @@ class _SearchPageState extends State<SearchPage> {
                           keyboardType: TextInputType.numberWithOptions(
                             decimal: true,
                           ),
+                          inputFormatters: [
+                            FilteringTextInputFormatter.allow(
+                              RegExp(r'[0-9.]'),
+                            ),
+                            _MaxValueTextInputFormatter(5),
+                          ],
                           onChanged: (value) {
-                            setModalState(() {
-                              maxRating = double.tryParse(value);
-                              isFilterActive = true;
+                            updateFilters(() {
+                              _setMaxRating(double.tryParse(value));
                             });
                           },
                         ),
@@ -282,6 +386,9 @@ class _SearchPageState extends State<SearchPage> {
                         return;
                       }
 
+                      setState(() {
+                        _refreshFilterActiveState();
+                      });
                       Navigator.pop(context);
                       _search(currentQuery);
                     },
@@ -386,20 +493,15 @@ class _SearchPageState extends State<SearchPage> {
               child: Wrap(
                 spacing: 8,
                 children: [
-                  if (selectedCategories.isNotEmpty)
+                  if (_categoryFilters.isNotEmpty)
                     Chip(
-                      label: Text(
-                        "Categories: ${selectedCategories.join(', ')}",
-                      ),
+                      label: Text("Categories: ${_categoryFilters.join(', ')}"),
                       onDeleted: () {
                         setState(() {
                           selectedCategories.clear();
-                          isFilterActive =
-                              selectedCategories.isNotEmpty ||
-                              minRating != null ||
-                              maxRating != null;
-                          _search(currentQuery);
+                          _refreshFilterActiveState();
                         });
+                        _search(currentQuery);
                       },
                     ),
                   if (minRating != null)
@@ -407,13 +509,9 @@ class _SearchPageState extends State<SearchPage> {
                       label: Text("Rating ≥ $minRating"),
                       onDeleted: () {
                         setState(() {
-                          minRating = null;
-                          isFilterActive =
-                              selectedCategories.isNotEmpty ||
-                              minRating != null ||
-                              maxRating != null;
-                          _search(currentQuery);
+                          _setMinRating(null);
                         });
+                        _search(currentQuery);
                       },
                     ),
                   if (maxRating != null)
@@ -421,13 +519,9 @@ class _SearchPageState extends State<SearchPage> {
                       label: Text("Rating ≤ $maxRating"),
                       onDeleted: () {
                         setState(() {
-                          maxRating = null;
-                          isFilterActive =
-                              selectedCategories.isNotEmpty ||
-                              minRating != null ||
-                              maxRating != null;
-                          _search(currentQuery);
+                          _setMaxRating(null);
                         });
+                        _search(currentQuery);
                       },
                     ),
                 ],
