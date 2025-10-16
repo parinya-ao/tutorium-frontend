@@ -18,6 +18,19 @@ class MainNavPage extends StatefulWidget {
 class _MainNavPageState extends State<MainNavPage> {
   int _currentIndex = 0;
   bool isLearner = true;
+  late PageController _pageController;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController(initialPage: _currentIndex);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
 
   void toggleRole() {
     setState(() {
@@ -37,16 +50,26 @@ class _MainNavPageState extends State<MainNavPage> {
     ];
 
     return Scaffold(
-      body: _pages[_currentIndex],
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) {
+      body: PageView(
+        controller: _pageController,
+        onPageChanged: (index) {
           setState(() {
             _currentIndex = index;
             if (_currentIndex == 0) {
               isLearner = true;
             }
           });
+        },
+        children: _pages,
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _currentIndex,
+        onTap: (index) {
+          _pageController.animateToPage(
+            index,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+          );
         },
         type: BottomNavigationBarType.fixed,
         selectedItemColor: Colors.green,
