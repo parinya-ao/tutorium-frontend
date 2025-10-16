@@ -39,10 +39,14 @@ dependencies:
   # Needed by payment_screen.dart (launchUrl, LaunchMode)
   url_launcher: ^6.3.2
   image_picker: ^1.1.2
-  # flutter_local_notifications: ^19.4.1
 
   #  jitsi meeting sdk ref: https://jitsi.support/developer/integrating-jitsi-flutter-guide/
   jitsi_meet_flutter_sdk: ^11.6.0
+
+  # noification ref: https://pub.dev/packages/flutter_local_notifications/install
+  flutter_local_notifications: ^19.4.2
+  timezone: ^0.10.0
+
 
 
 dev_dependencies:
@@ -55,6 +59,7 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.14.4
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -100,3 +105,12 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+# Flutter Launcher Icons configuration
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/KT.png"
+  min_sdk_android: 24
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/images/KT.png"
