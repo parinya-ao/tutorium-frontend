@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../widgets/schedule_card.dart';
+import '../../services/local_notification_service.dart';
 
 class LearnerHomePage extends StatefulWidget {
   final VoidCallback onSwitch;
@@ -10,9 +11,54 @@ class LearnerHomePage extends StatefulWidget {
 }
 
 class _LearnerHomePageState extends State<LearnerHomePage> {
+  final _notificationService = LocalNotificationService();
+
   @override
-  Widget build(BuildContext context) {
-    final List<Map<String, dynamic>> scheduleData = [
+  void initState() {
+    super.initState();
+    _initializeNotifications();
+  }
+
+  Future<void> _initializeNotifications() async {
+    await _notificationService.initialize();
+    _scheduleNotificationsForClasses();
+  }
+
+  void _scheduleNotificationsForClasses() {
+    final scheduleData = _getScheduleData();
+
+    for (int i = 0; i < scheduleData.length; i++) {
+      final item = scheduleData[i];
+      final classStartTime = _parseDateTime(
+        item['date'] as String,
+        item['startTime'] as String,
+      );
+
+      // Schedule notifications only if class is in the future
+      if (classStartTime.isAfter(DateTime.now())) {
+        _notificationService.scheduleClassReminders(
+          classStartTime: classStartTime,
+          className: item['className'] as String,
+          classSessionId: i + 1, // Use index as ID for demo
+        );
+      }
+    }
+  }
+
+  DateTime _parseDateTime(String dateStr, String timeStr) {
+    final date = DateTime.parse(dateStr);
+    final timeParts = timeStr.split(':');
+    return DateTime(
+      date.year,
+      date.month,
+      date.day,
+      int.parse(timeParts[0]),
+      int.parse(timeParts[1]),
+    );
+  }
+
+  List<Map<String, dynamic>> _getScheduleData() {
+    return [
       {
         'className': 'Guitar class by Jane',
         'enrolledLearner': 10,
@@ -41,6 +87,11 @@ class _LearnerHomePageState extends State<LearnerHomePage> {
         'imagePath': 'assets/images/violin.jpg',
       },
     ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheduleData = _getScheduleData();
 
     DateTime parseDate(String dateStr) => DateTime.parse(dateStr);
     TimeOfDay parseTime(String timeStr) {
