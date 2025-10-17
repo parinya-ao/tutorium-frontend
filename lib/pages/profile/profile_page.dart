@@ -1,118 +1,16 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
-import 'dart:convert';
-import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import 'package:tutorium_frontend/pages/home/teacher/register/payment_screen.dart';
 import 'package:tutorium_frontend/pages/profile/allClasses_page.dart';
 import 'package:tutorium_frontend/pages/widgets/history_class.dart';
-
-class User {
-  final int id;
-  final String? studentId;
-  final String? firstName;
-  final String? lastName;
-  final String? gender;
-  final String? phoneNumber;
-  final double balance;
-  final int banCount;
-  final String? profilePicture;
-  final Teacher? teacher;
-  final Learner? learner;
-
-  User({
-    required this.id,
-    this.studentId,
-    this.firstName,
-    this.lastName,
-    this.gender,
-    this.phoneNumber,
-    required this.balance,
-    required this.banCount,
-    this.profilePicture,
-    this.teacher,
-    this.learner,
-  });
-
-  factory User.fromJson(Map<String, dynamic> json) {
-    return User(
-      id: json['ID'],
-      studentId: json['student_id'],
-      firstName: json['first_name'],
-      lastName: json['last_name'],
-      gender: json['gender'],
-      phoneNumber: json['phone_number'],
-      balance: (json['balance'] ?? 0).toDouble(),
-      banCount: json['ban_count'] ?? 0,
-      profilePicture: json['profile_picture'],
-      teacher: json['Teacher'] != null
-          ? Teacher.fromJson(json['Teacher'])
-          : null,
-      learner: json['Learner'] != null
-          ? Learner.fromJson(json['Learner'])
-          : null,
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      "ID": id,
-      "student_id": studentId,
-      "first_name": firstName,
-      "last_name": lastName,
-      "gender": gender,
-      "phone_number": phoneNumber,
-      "balance": balance,
-      "ban_count": banCount,
-      "profile_picture": profilePicture,
-      "Teacher": teacher,
-      "Learner": learner,
-    };
-  }
-}
-
-class Teacher {
-  final int id;
-  final int userId;
-  final String? description;
-  final int? flagCount;
-  final String? email;
-
-  Teacher({
-    required this.id,
-    required this.userId,
-    this.description,
-    this.flagCount,
-    this.email,
-  });
-
-  factory Teacher.fromJson(Map<String, dynamic> json) {
-    return Teacher(
-      id: json['ID'],
-      userId: json['user_id'],
-      description: json['description'] ?? '',
-      flagCount: json['flag_count'] ?? 0,
-      email: json['email'] ?? '',
-    );
-  }
-}
-
-class Learner {
-  final int id;
-  final int userId;
-  final int? flagCount;
-
-  Learner({required this.id, required this.userId, this.flagCount});
-
-  factory Learner.fromJson(Map<String, dynamic> json) {
-    return Learner(
-      id: json['ID'],
-      userId: json['user_id'],
-      flagCount: json['flag_count'] ?? 0,
-    );
-  }
-}
+import 'package:tutorium_frontend/service/Users.dart' as user_api;
+import 'package:tutorium_frontend/util/cache_user.dart';
+import 'package:tutorium_frontend/util/local_storage.dart';
 
 class Class {
   final int id;
@@ -137,35 +35,6 @@ class Class {
   }
 }
 
-class Review {
-  final int id;
-  final int learnerId;
-  final int classId;
-  final String? comment;
-  final double? rating;
-  final int? learnerUserId;
-
-  Review({
-    required this.id,
-    required this.learnerId,
-    required this.classId,
-    this.comment,
-    this.rating,
-    this.learnerUserId,
-  });
-
-  factory Review.fromJson(Map<String, dynamic> json) {
-    return Review(
-      id: json['ID'],
-      learnerId: json['learner_id'],
-      classId: json['class_id'],
-      comment: json['comment'],
-      rating: (json['rating'] ?? 0).toDouble(),
-      learnerUserId: json['Learner']?['user_id'],
-    );
-  }
-}
-
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
 
@@ -174,10 +43,11 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  User? user;
+  user_api.User? user;
   List<Class> allClasses = [];
   List<Class> myClasses = [];
   bool isLoading = true;
+  bool isUploadingImage = false;
 
   @override
   void initState() {
@@ -185,33 +55,43 @@ class _ProfilePageState extends State<ProfilePage> {
     fetchUser();
   }
 
-  Future<void> fetchUser() async {
+  Future<void> fetchUser({bool forceRefresh = false}) async {
+    if (mounted) {
+      setState(() {
+        isLoading = true;
+      });
+    }
     try {
-      final apiKey = dotenv.env["API_URL"];
-      final port = dotenv.env["PORT"];
+      // Get user ID from local storage
+      final userId = await LocalStorage.getUserId();
 
-      final apiUrl = "$apiKey:$port/users/3"; //Put the real user id here
-      final response = await http.get(Uri.parse(apiUrl));
-
-      if (response.statusCode == 200) {
-        final jsonData = jsonDecode(response.body);
-        setState(() {
-          user = User.fromJson(jsonData);
-          isLoading = false;
-        });
-        await fetchClasses();
-      } else {
-        throw Exception("Failed to load user");
+      if (userId == null) {
+        throw Exception('User ID not found in local storage');
       }
+
+      // Get user from cache or fetch if needed
+      final fetchedUser = await UserCache().getUser(
+        userId,
+        forceRefresh: forceRefresh,
+      );
+      if (!mounted) return;
+
+      setState(() {
+        user = fetchedUser;
+        isLoading = false;
+      });
+
+      await fetchClasses(fetchedUser);
     } catch (e) {
-      print("Error: $e");
+      debugPrint("Error fetching user: $e");
+      if (!mounted) return;
       setState(() {
         isLoading = false;
       });
     }
   }
 
-  Future<void> fetchClasses() async {
+  Future<void> fetchClasses([user_api.User? currentUser]) async {
     try {
       final apiKey = dotenv.env["API_URL"];
       final port = dotenv.env["PORT"];
@@ -224,12 +104,17 @@ class _ProfilePageState extends State<ProfilePage> {
 
         final fetchedClasses = jsonData.map((c) => Class.fromJson(c)).toList();
 
+        if (!mounted) {
+          return;
+        }
         setState(() {
           allClasses = fetchedClasses;
 
-          if (user?.teacher != null) {
-            final fullName = "${user?.firstName ?? ''} ${user?.lastName ?? ''}"
-                .trim();
+          final profileUser = currentUser ?? user;
+          if (profileUser?.teacher != null) {
+            final fullName =
+                "${profileUser?.firstName ?? ''} ${profileUser?.lastName ?? ''}"
+                    .trim();
             myClasses = allClasses
                 .where((c) => c.teacherName == fullName)
                 .toList();
@@ -239,36 +124,121 @@ class _ProfilePageState extends State<ProfilePage> {
         throw Exception("Failed to load classes");
       }
     } catch (e) {
-      print("Error fetching classes: $e");
+      debugPrint("Error fetching classes: $e");
     }
   }
 
   Future<String?> pickImageAndConvertToBase64() async {
     final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+    try {
+      final pickedFile = await picker.pickImage(source: ImageSource.gallery);
 
-    if (pickedFile != null) {
-      final bytes = await File(pickedFile.path).readAsBytes();
-      return base64Encode(bytes);
+      if (pickedFile == null) {
+        return null;
+      }
+
+      final fileName = pickedFile.name.toLowerCase();
+      const allowedExtensions = {'jpg', 'jpeg', 'png'};
+      final extension = fileName.split('.').last;
+
+      if (!allowedExtensions.contains(extension)) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('รองรับเฉพาะไฟล์ .jpg และ .png เท่านั้น'),
+            ),
+          );
+        }
+        return null;
+      }
+
+      final bytes = await pickedFile.readAsBytes();
+      final base64String = base64Encode(bytes);
+      final mimeType = extension == 'png' ? 'image/png' : 'image/jpeg';
+      return 'data:$mimeType;base64,$base64String';
+    } on PlatformException catch (e) {
+      debugPrint('Image picker error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('ไม่สามารถเปิดคลังรูปภาพได้')),
+        );
+      }
+    } catch (e) {
+      debugPrint('Unexpected image picker error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('เกิดข้อผิดพลาดในการเลือกรูป')),
+        );
+      }
     }
     return null;
   }
 
   Future<void> uploadProfilePicture(int userId, String base64Image) async {
-    final apiKey = dotenv.env["API_URL"];
-    final port = dotenv.env["PORT"];
-    final apiUrl = "$apiKey:$port/users/3"; //Put the real user id here
+    if (user == null) return;
 
-    final response = await http.post(
-      Uri.parse(apiUrl),
-      headers: {"Content-Type": "application/json"},
-      body: jsonEncode({"user_id": userId, "profile_picture": base64Image}),
-    );
-
-    if (response.statusCode == 200) {
-      print("Upload success");
+    if (mounted) {
+      setState(() {
+        isUploadingImage = true;
+      });
     } else {
-      print("Upload failed: ${response.body}");
+      isUploadingImage = true;
+    }
+
+    try {
+      final updatedUser = await user_api.User.update(
+        userId,
+        user_api.User(
+          id: user!.id,
+          studentId: user!.studentId,
+          firstName: user!.firstName,
+          lastName: user!.lastName,
+          gender: user!.gender,
+          phoneNumber: user!.phoneNumber,
+          balance: user!.balance,
+          banCount: user!.banCount,
+          profilePicture: base64Image,
+        ),
+      );
+
+      // Update cache with new user data
+      UserCache().updateUser(updatedUser);
+
+      if (mounted) {
+        setState(() {
+          user = updatedUser;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Profile picture updated')),
+        );
+        // Refresh user data to get the latest profile picture
+        await fetchUser(forceRefresh: true);
+      }
+      debugPrint("Upload success");
+    } catch (e) {
+      debugPrint("Upload failed: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to update profile picture')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          isUploadingImage = false;
+        });
+      } else {
+        isUploadingImage = false;
+      }
+    }
+  }
+
+  Future<void> _onProfileImageTap() async {
+    if (isLoading || user == null || isUploadingImage) return;
+
+    final base64Image = await pickImageAndConvertToBase64();
+    if (base64Image != null) {
+      await uploadProfilePicture(user!.id, base64Image);
     }
   }
 
@@ -278,7 +248,15 @@ class _ProfilePageState extends State<ProfilePage> {
     if (value.startsWith("http")) {
       return NetworkImage(value);
     } else {
-      return MemoryImage(base64Decode(value));
+      try {
+        final payload = value.startsWith('data:image')
+            ? value.substring(value.indexOf(',') + 1)
+            : value;
+        return MemoryImage(base64Decode(payload));
+      } catch (e) {
+        debugPrint('Failed to decode profile image: $e');
+        return null;
+      }
     }
   }
 
@@ -319,7 +297,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
                       // Refresh user data if payment was successful
                       if (result == true) {
-                        await fetchUser();
+                        await fetchUser(forceRefresh: true);
                       }
                     },
                     child: const Icon(
@@ -347,17 +325,61 @@ class _ProfilePageState extends State<ProfilePage> {
             children: [
               const SizedBox(width: 15),
 
-              CircleAvatar(
-                radius: 50,
-                backgroundColor: Colors.grey[200],
-                backgroundImage: _getImageProvider(user?.profilePicture),
-                child: _getImageProvider(user?.profilePicture) == null
-                    ? const Icon(
-                        Icons.account_circle_rounded,
-                        color: Colors.black,
-                        size: 100,
-                      )
-                    : null,
+              GestureDetector(
+                onTap: _onProfileImageTap,
+                child: SizedBox(
+                  width: 100,
+                  height: 100,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      CircleAvatar(
+                        radius: 50,
+                        backgroundColor: Colors.grey[200],
+                        backgroundImage: _getImageProvider(
+                          user?.profilePicture,
+                        ),
+                        child: _getImageProvider(user?.profilePicture) == null
+                            ? const Icon(
+                                Icons.account_circle_rounded,
+                                color: Colors.black,
+                                size: 100,
+                              )
+                            : null,
+                      ),
+                      if (isUploadingImage)
+                        Container(
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Color.fromRGBO(0, 0, 0, 0.4),
+                          ),
+                          child: const Center(
+                            child: SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
+                      Positioned(
+                        bottom: 6,
+                        right: 6,
+                        child: CircleAvatar(
+                          radius: 15,
+                          backgroundColor: Colors.black54,
+                          child: const Icon(
+                            Icons.camera_alt,
+                            color: Colors.white,
+                            size: 18,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
 
               const SizedBox(width: 20),
@@ -513,7 +535,8 @@ class _ProfilePageState extends State<ProfilePage> {
                             className: c.className,
                             teacherName: c.teacherName,
                             rating: c.rating ?? 0.0,
-                            enrolledLearner: 100, // replace with real data
+                            enrolledLearner: 100,
+                            // replace with real data
                             imagePath:
                                 "assets/images/guitar.jpg", // wait for real image
                           ),

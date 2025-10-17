@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'package:tutorium_frontend/pages/main_nav_page.dart';
+import 'package:tutorium_frontend/util/local_storage.dart';
+import 'package:tutorium_frontend/util/cache_user.dart';
+import 'package:tutorium_frontend/service/Users.dart' as user_api;
 
 class User {
   final int id;
@@ -34,7 +37,7 @@ class User {
       lastName: json['last_name'],
       gender: json['gender'],
       phoneNumber: json['phone_number'],
-      balance: json['balance'] ?? 0,
+      balance: (json['balance'] ?? 0).toDouble(),
       banCount: json['ban_count'] ?? 0,
     );
   }
@@ -103,8 +106,15 @@ class _UserLoginPageState extends State<UserLoginPage> {
       final password = _passwordController.text;
 
       try {
-        // final loginResponse = await fetchUser(username, password);
-        final _ = await fetchUser(username, password);
+        final loginResponse = await fetchUser(username, password);
+
+        // Save user ID and token to local storage
+        await LocalStorage.saveUserId(loginResponse.user.id);
+        await LocalStorage.saveToken(loginResponse.token);
+
+        // Fetch full user data and save to cache
+        final fullUser = await user_api.User.fetchById(loginResponse.user.id);
+        UserCache().saveUser(fullUser);
 
         Navigator.pushAndRemoveUntil(
           context,
