@@ -3,10 +3,9 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
-import 'package:tutorium_frontend/pages/main_nav_page.dart';
 import 'package:tutorium_frontend/util/local_storage.dart';
 import 'package:tutorium_frontend/util/cache_user.dart';
-import 'package:tutorium_frontend/service/Users.dart' as user_api;
+import 'package:tutorium_frontend/service/users.dart' as user_api;
 
 class User {
   final int id;
@@ -112,18 +111,25 @@ class _UserLoginPageState extends State<UserLoginPage> {
         await LocalStorage.saveUserId(loginResponse.user.id);
         await LocalStorage.saveToken(loginResponse.token);
 
-        // Fetch full user data and save to cache
+        // Fetch full user data and save to cache + local storage
         final fullUser = await user_api.User.fetchById(loginResponse.user.id);
-        UserCache().saveUser(fullUser);
+        UserCache().saveUser(fullUser); // This also saves to LocalStorage
 
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(builder: (context) => MainNavPage()),
-          (route) => false,
+        debugPrint('DEBUG Login: User saved to cache and local storage');
+        debugPrint(
+          'DEBUG Login: userId=${fullUser.id}, name=${fullUser.firstName}',
         );
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Login successfully')));
+
+        if (!mounted) return;
+
+        Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('เข้าสู่ระบบสำเร็จ'),
+            backgroundColor: Colors.green,
+          ),
+        );
       } catch (e) {
         ScaffoldMessenger.of(
           context,

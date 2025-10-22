@@ -1,9 +1,37 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
+
+/// Custom InputFormatter to limit maximum amount
+class _MaxAmountInputFormatter extends TextInputFormatter {
+  final double maxAmount;
+
+  _MaxAmountInputFormatter({required this.maxAmount});
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    if (newValue.text.isEmpty) {
+      return newValue;
+    }
+
+    // Try to parse the new value
+    final parsed = double.tryParse(newValue.text);
+
+    // If can't parse or exceeds max, return old value
+    if (parsed == null || parsed > maxAmount) {
+      return oldValue;
+    }
+
+    return newValue;
+  }
+}
 
 class PaymentScreen extends StatefulWidget {
   final int userId;
@@ -14,6 +42,8 @@ class PaymentScreen extends StatefulWidget {
   State<PaymentScreen> createState() => _PaymentScreenState();
 }
 
+enum PaymentStatus { idle, creating, pending, success, failed, timeout }
+
 class _PaymentScreenState extends State<PaymentScreen>
     with SingleTickerProviderStateMixin {
   late final String backendUrl;
@@ -22,17 +52,21 @@ class _PaymentScreenState extends State<PaymentScreen>
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
 
-  bool _isLoading = false;
-  bool _paymentSuccess = false;
-  String _message = 'พร้อมสำหรับการสร้างคำสั่งชำระเงิน';
+  PaymentStatus _status = PaymentStatus.idle;
+  String _statusMessage = 'พร้อมสำหรับการสร้างคำสั่งชำระเงิน';
   String? _chargeId;
+  String? _errorDetails;
+  Timer? _pollingTimer;
+  int _pollingCount = 0;
+  static const int _maxPollingAttempts = 100; // 100 * 3 sec = 5 minutes
+  String? _qrCodeUrl;
 
   @override
   void initState() {
     super.initState();
-    backendUrl =
-        '${dotenv.env["API_URL"]}:${dotenv.env["PORT"]}' ??
-        'http://10.0.2.2:8080';
+    backendUrl = '${dotenv.env["API_URL"]}:${dotenv.env["PORT"]}' != ':'
+        ? '${dotenv.env["API_URL"]}:${dotenv.env["PORT"]}'
+        : 'http://10.0.2.2:8080';
 
     _animationController = AnimationController(
       vsync: this,
@@ -46,6 +80,7 @@ class _PaymentScreenState extends State<PaymentScreen>
 
   @override
   void dispose() {
+    _pollingTimer?.cancel();
     _amountController.dispose();
     _animationController.dispose();
     super.dispose();
@@ -53,151 +88,455 @@ class _PaymentScreenState extends State<PaymentScreen>
 
   // --- helpers ---
 
-  Future<void> _setStatus(
-    String msg, {
-    bool loading = false,
-    bool success = false,
-  }) async {
+  void _updateStatus(
+    PaymentStatus status,
+    String message, {
+    String? errorDetails,
+  }) {
     if (!mounted) return;
     setState(() {
-      _message = msg;
-      _isLoading = loading;
-      _paymentSuccess = success;
+      _status = status;
+      _statusMessage = message;
+      _errorDetails = errorDetails;
     });
+  }
+
+  void _startPolling() {
+    _pollingCount = 0;
+    _pollingTimer?.cancel();
+    _pollingTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
+      _pollingCount++;
+      if (_pollingCount > _maxPollingAttempts) {
+        timer.cancel();
+        _updateStatus(
+          PaymentStatus.timeout,
+          'หมดเวลารอการชำระเงิน (5 นาที)',
+          errorDetails: 'กรุณาสร้างคำสั่งชำระเงินใหม่',
+        );
+        return;
+      }
+      _checkPaymentStatus(isAutoPolling: true);
+    });
+  }
+
+  void _stopPolling() {
+    _pollingTimer?.cancel();
+    _pollingCount = 0;
   }
 
   Future<void> _processPayment(Map<String, dynamic> payload) async {
-    setState(() {
-      _isLoading = true;
-      _message = 'Processing payment...';
-      _chargeId = null;
-    });
+    _stopPolling();
+    _updateStatus(PaymentStatus.creating, 'กำลังสร้างคำสั่งชำระเงิน...');
 
     try {
-      // Add user_id to all requests
       payload['user_id'] = widget.userId;
 
-      final res = await http.post(
-        Uri.parse('$backendUrl/payments/charge'), // Updated endpoint
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode(payload),
-      );
+      final res = await http
+          .post(
+            Uri.parse('$backendUrl/payments/charge'),
+            headers: {'Content-Type': 'application/json'},
+            body: json.encode(payload),
+          )
+          .timeout(
+            const Duration(seconds: 30),
+            onTimeout: () {
+              throw TimeoutException(
+                'การเชื่อมต่อหมดเวลา กรุณาลองใหม่อีกครั้ง',
+              );
+            },
+          );
 
       final body = json.decode(res.body);
+
+      // Handle error responses
       if (res.statusCode != 200) {
-        await _setStatus('Payment failed: ${body['error'] ?? 'Server error'}');
+        final errorMsg =
+            body['error'] ?? body['message'] ?? 'เกิดข้อผิดพลาดจากเซิร์ฟเวอร์';
+        _updateStatus(
+          PaymentStatus.failed,
+          'การสร้างคำสั่งชำระเงินล้มเหลว',
+          errorDetails: errorMsg,
+        );
         return;
       }
 
-      // Handle different response formats based on payment type
-      if (body['type'] == 'credit_card') {
-        _chargeId = body['charge_id'] as String?;
-        final status = (body['status'] as String?) ?? 'unknown';
-        final authorized = body['authorized'] == true;
+      // Parse charge ID and QR code
+      _chargeId = body['charge_id'] ?? body['id'];
+      _qrCodeUrl = body['qr_code_url'];
 
-        final summary = StringBuffer(
-          'Charge ${_chargeId ?? ''} → status: $status',
+      if (_chargeId == null || _chargeId!.isEmpty) {
+        _updateStatus(
+          PaymentStatus.failed,
+          'ไม่พบรหัสคำสั่งชำระเงิน',
+          errorDetails: 'Response: ${json.encode(body)}',
         );
-        if (authorized) summary.write(' (authorized)');
-        await _setStatus(summary.toString());
-      } else if (body['type'] == 'promptpay') {
-        _chargeId = body['charge_id'] as String?;
-        final status = (body['status'] as String?) ?? 'unknown';
-
-        final summary = StringBuffer(
-          'รายการ ${_chargeId ?? '-'} สถานะ: $status',
-        );
-        await _setStatus(summary.toString());
-      } else if (body['type'] == 'truemoney' ||
-          body['type'] == 'internet_banking') {
-        _chargeId = body['charge_id'] as String?;
-        final status = (body['status'] as String?) ?? 'unknown';
-
-        final summary = StringBuffer(
-          'Charge ${_chargeId ?? ''} → status: $status',
-        );
-        await _setStatus(summary.toString());
-      } else {
-        // Fallback to original Omise response parsing
-        _chargeId = body['id'] as String?;
-        final status = (body['status'] as String?) ?? 'unknown';
-        final paid = body['paid'] == true;
-
-        final summary = StringBuffer(
-          'Charge ${_chargeId ?? ''} → status: $status',
-        );
-        if (paid) summary.write(' (paid)');
-
-        await _setStatus(summary.toString());
+        return;
       }
+
+      // Check if already paid
+      final isPaid = body['paid'] == true;
+      if (isPaid) {
+        _updateStatus(PaymentStatus.success, 'ชำระเงินสำเร็จแล้ว!');
+        _navigateBackWithSuccess();
+        return;
+      }
+
+      // Start polling for payment status
+      _updateStatus(PaymentStatus.pending, 'รอการชำระเงิน');
+      _startPolling();
+    } on TimeoutException catch (e) {
+      _updateStatus(
+        PaymentStatus.failed,
+        'หมดเวลาการเชื่อมต่อ',
+        errorDetails: e.message ?? 'กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ต',
+      );
     } catch (e) {
-      await _setStatus('Error: $e');
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
+      _updateStatus(
+        PaymentStatus.failed,
+        'เกิดข้อผิดพลาด',
+        errorDetails: e.toString(),
+      );
     }
   }
 
-  Future<void> _checkPaymentStatus() async {
+  Future<void> _checkPaymentStatus({bool isAutoPolling = false}) async {
     if (_chargeId == null || _chargeId!.isEmpty) {
-      await _setStatus('ยังไม่มีคำสั่งชำระเงินให้ตรวจสอบ');
+      if (!isAutoPolling) {
+        _updateStatus(
+          PaymentStatus.failed,
+          'ยังไม่มีคำสั่งชำระเงิน',
+          errorDetails: 'กรุณาสร้างคำสั่งชำระเงินก่อน',
+        );
+      }
       return;
     }
 
-    await _setStatus('กำลังตรวจสอบสถานะการชำระเงิน...', loading: true);
     try {
-      final res = await http.post(
-        Uri.parse('$backendUrl/webhooks/omise'),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode({'id': _chargeId, 'object': 'charge'}),
-      );
+      final res = await http
+          .post(
+            Uri.parse('$backendUrl/webhooks/omise'),
+            headers: {'Content-Type': 'application/json'},
+            body: json.encode({'id': _chargeId, 'object': 'charge'}),
+          )
+          .timeout(
+            const Duration(seconds: 10),
+            onTimeout: () => throw TimeoutException('หมดเวลาตรวจสอบสถานะ'),
+          );
+
+      final body = json.decode(res.body);
 
       if (res.statusCode == 200) {
-        await _setStatus('การชำระเงินสำเร็จ!', success: true);
+        final isPaid = body['paid'] == true;
 
-        // Pop back immediately with success flag
-        if (mounted) {
-          Navigator.of(context).pop(true);
+        if (isPaid) {
+          _stopPolling();
+          _updateStatus(PaymentStatus.success, 'ชำระเงินสำเร็จ!');
+          _navigateBackWithSuccess();
+        } else if (!isAutoPolling) {
+          // Manual check but not paid yet
+          _updateStatus(PaymentStatus.pending, 'ยังไม่ได้รับการชำระเงิน');
         }
       } else {
-        await _setStatus(
-          'ตรวจสอบสถานะไม่สำเร็จ (${res.statusCode}): ${res.body}',
+        if (!isAutoPolling) {
+          _updateStatus(
+            PaymentStatus.failed,
+            'ตรวจสอบสถานะไม่สำเร็จ',
+            errorDetails:
+                'HTTP ${res.statusCode}: ${body['error'] ?? res.body}',
+          );
+        }
+      }
+    } on TimeoutException catch (e) {
+      if (!isAutoPolling) {
+        _updateStatus(
+          PaymentStatus.failed,
+          'หมดเวลาการเชื่อมต่อ',
+          errorDetails: e.message,
         );
       }
     } catch (e) {
-      await _setStatus('เกิดข้อผิดพลาดระหว่างตรวจสอบสถานะ: $e');
+      if (!isAutoPolling) {
+        _updateStatus(
+          PaymentStatus.failed,
+          'เกิดข้อผิดพลาด',
+          errorDetails: e.toString(),
+        );
+      }
     }
+  }
+
+  void _navigateBackWithSuccess() {
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) {
+        Navigator.of(context).pop(true);
+      }
+    });
   }
 
   Future<void> _submitPayment() async {
     final form = _formKey.currentState;
-    if (form == null) return;
-    if (!form.validate()) return;
+    if (form == null || !form.validate()) return;
 
     FocusScope.of(context).unfocus();
 
     final rawInput = _amountController.text.replaceAll(',', '').trim();
     final amountDouble = double.tryParse(rawInput);
-    if (amountDouble == null) {
-      await _setStatus('Please enter a valid amount');
+
+    // ตรวจสอบความถูกต้องของจำนวนเงิน
+    if (amountDouble == null || amountDouble <= 0) {
+      _updateStatus(
+        PaymentStatus.failed,
+        'จำนวนเงินไม่ถูกต้อง',
+        errorDetails: 'กรุณากรอกจำนวนเงินที่ถูกต้อง',
+      );
+      return;
+    }
+
+    // ตรวจสอบไม่เกิน 10,000 บาท
+    if (amountDouble > 10000) {
+      _updateStatus(
+        PaymentStatus.failed,
+        'จำนวนเงินเกินกำหนด',
+        errorDetails: 'จำนวนเงินต้องไม่เกิน 10,000 บาทต่อครั้ง',
+      );
       return;
     }
 
     final amountSatang = (amountDouble * 100).round();
-    if (amountSatang <= 0) {
-      await _setStatus('Amount must be greater than zero');
-      return;
-    }
 
     await _processPayment({
       'amount': amountSatang,
       'currency': 'THB',
       'paymentType': 'promptpay',
-      'description': 'Tutorium teacher registration payment',
+      'description': 'เติมเงินเข้ากระเป๋า Tutorium',
       'metadata': {
-        'source': 'teacher_registration',
+        'source': 'wallet_topup',
         'display_amount': rawInput,
+        'user_id': widget.userId,
       },
     });
+  }
+
+  void _resetPayment() {
+    _stopPolling();
+    setState(() {
+      _status = PaymentStatus.idle;
+      _statusMessage = 'พร้อมสำหรับการสร้างคำสั่งชำระเงิน';
+      _chargeId = null;
+      _errorDetails = null;
+      _qrCodeUrl = null;
+      _pollingCount = 0;
+    });
+  }
+
+  Widget _buildStatusCard() {
+    Color statusColor;
+    Color bgColor;
+    IconData statusIcon;
+    String statusTitle;
+
+    switch (_status) {
+      case PaymentStatus.creating:
+        statusColor = Colors.blue;
+        bgColor = Colors.blue.shade50;
+        statusIcon = Icons.hourglass_empty_rounded;
+        statusTitle = 'กำลังสร้างคำสั่งชำระเงิน...';
+        break;
+      case PaymentStatus.pending:
+        statusColor = Colors.orange;
+        bgColor = Colors.orange.shade50;
+        statusIcon = Icons.schedule_rounded;
+        statusTitle = 'รอการชำระเงิน';
+        break;
+      case PaymentStatus.success:
+        statusColor = Colors.green;
+        bgColor = Colors.green.shade50;
+        statusIcon = Icons.check_circle_rounded;
+        statusTitle = 'ชำระเงินสำเร็จ!';
+        break;
+      case PaymentStatus.failed:
+        statusColor = Colors.red;
+        bgColor = Colors.red.shade50;
+        statusIcon = Icons.error_rounded;
+        statusTitle = 'เกิดข้อผิดพลาด';
+        break;
+      case PaymentStatus.timeout:
+        statusColor = Colors.grey;
+        bgColor = Colors.grey.shade50;
+        statusIcon = Icons.timer_off_rounded;
+        statusTitle = 'หมดเวลา';
+        break;
+      default:
+        return const SizedBox.shrink();
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          // Status icon with animation
+          TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0.0, end: 1.0),
+            duration: const Duration(milliseconds: 500),
+            builder: (context, value, child) {
+              return Transform.scale(
+                scale: value,
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: bgColor,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(statusIcon, size: 48, color: statusColor),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 16),
+
+          // Status title
+          Text(
+            statusTitle,
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: statusColor,
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // Status message
+          Text(
+            _statusMessage,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 15,
+              color: Colors.grey.shade700,
+              height: 1.4,
+            ),
+          ),
+
+          // Error details (only for failed status, hide technical details)
+          if (_status == PaymentStatus.failed &&
+              _errorDetails != null &&
+              _errorDetails!.isNotEmpty &&
+              !_errorDetails!.startsWith('Charge ID:') &&
+              !_errorDetails!.startsWith('Response:') &&
+              !_errorDetails!.startsWith('HTTP')) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.red.shade200),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    color: Colors.red.shade700,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _errorDetails!,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.red.shade700,
+                        height: 1.3,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          // Polling indicator (if pending)
+          if (_status == PaymentStatus.pending) ...[
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(statusColor),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  'ตรวจสอบอัตโนมัติทุก 3 วินาที (${_pollingCount}/${_maxPollingAttempts})',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                ),
+              ],
+            ),
+          ],
+
+          // Action buttons
+          if (_status == PaymentStatus.pending ||
+              _status == PaymentStatus.failed ||
+              _status == PaymentStatus.timeout) ...[
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                if (_status == PaymentStatus.pending)
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () =>
+                          _checkPaymentStatus(isAutoPolling: false),
+                      icon: const Icon(Icons.refresh_rounded, size: 20),
+                      label: const Text('ตรวจสอบเลย'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        foregroundColor: statusColor,
+                        side: BorderSide(color: statusColor, width: 2),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ),
+                if (_status == PaymentStatus.failed ||
+                    _status == PaymentStatus.timeout) ...[
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: _resetPayment,
+                      icon: const Icon(Icons.replay_rounded, size: 20),
+                      label: const Text('ลองใหม่'),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        backgroundColor: const Color(0xFF667eea),
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
   @override
@@ -238,7 +577,7 @@ class _PaymentScreenState extends State<PaymentScreen>
                     borderRadius: BorderRadius.circular(24),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF667eea).withOpacity(0.3),
+                        color: const Color(0xFF667eea).withValues(alpha: 0.3),
                         blurRadius: 24,
                         offset: const Offset(0, 8),
                       ),
@@ -249,7 +588,7 @@ class _PaymentScreenState extends State<PaymentScreen>
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
+                          color: Colors.white.withValues(alpha: 0.2),
                           shape: BoxShape.circle,
                         ),
                         child: const Icon(
@@ -271,7 +610,7 @@ class _PaymentScreenState extends State<PaymentScreen>
                       Text(
                         'ชำระผ่าน PromptPay อย่างรวดเร็ว',
                         style: TextStyle(
-                          color: Colors.white.withOpacity(0.9),
+                          color: Colors.white.withValues(alpha: 0.9),
                           fontSize: 14,
                         ),
                       ),
@@ -287,7 +626,7 @@ class _PaymentScreenState extends State<PaymentScreen>
                     borderRadius: BorderRadius.circular(20),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
+                        color: Colors.black.withValues(alpha: 0.05),
                         blurRadius: 10,
                         offset: const Offset(0, 4),
                       ),
@@ -319,9 +658,12 @@ class _PaymentScreenState extends State<PaymentScreen>
                             signed: false,
                           ),
                           inputFormatters: [
+                            // อนุญาตเฉพาะตัวเลขและจุดทศนิยม (ห้ามติดลบ)
                             FilteringTextInputFormatter.allow(
                               RegExp(r'^\d*\.?\d{0,2}'),
                             ),
+                            // จำกัดจำนวนเงินไม่เกิน 10000
+                            _MaxAmountInputFormatter(maxAmount: 10000),
                           ],
                           decoration: InputDecoration(
                             hintText: '0.00',
@@ -382,15 +724,53 @@ class _PaymentScreenState extends State<PaymentScreen>
                             if (parsed <= 0) {
                               return 'จำนวนเงินต้องมากกว่า 0 บาท';
                             }
+                            if (parsed > 10000) {
+                              return 'จำนวนเงินต้องไม่เกิน 10,000 บาท';
+                            }
                             return null;
                           },
                         ),
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 12),
+                        // Warning text
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.shade50,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.orange.shade200),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.info_outline,
+                                color: Colors.orange.shade700,
+                                size: 16,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'จำกัดการเติมเงินไม่เกิน 10,000 บาทต่อครั้ง',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.orange.shade700,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
                         // Quick amount buttons
                         Wrap(
                           spacing: 8,
                           runSpacing: 8,
-                          children: [50, 100, 200, 500, 1000].map((amount) {
+                          children: [50, 100, 200, 500, 1000, 5000, 10000].map((
+                            amount,
+                          ) {
                             return InkWell(
                               onTap: () =>
                                   _amountController.text = amount.toString(),
@@ -408,7 +788,7 @@ class _PaymentScreenState extends State<PaymentScreen>
                                   ),
                                 ),
                                 child: Text(
-                                  '฿$amount',
+                                  '฿${amount >= 1000 ? '${(amount / 1000).toStringAsFixed(amount % 1000 == 0 ? 0 : 1)}K' : amount}',
                                   style: const TextStyle(
                                     fontSize: 14,
                                     fontWeight: FontWeight.w600,
@@ -423,7 +803,11 @@ class _PaymentScreenState extends State<PaymentScreen>
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton(
-                            onPressed: _isLoading ? null : _submitPayment,
+                            onPressed:
+                                (_status == PaymentStatus.creating ||
+                                    _status == PaymentStatus.pending)
+                                ? null
+                                : _submitPayment,
                             style: ElevatedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 18),
                               backgroundColor: const Color(0xFF667eea),
@@ -434,7 +818,7 @@ class _PaymentScreenState extends State<PaymentScreen>
                               ),
                               disabledBackgroundColor: Colors.grey.shade300,
                             ),
-                            child: _isLoading
+                            child: _status == PaymentStatus.creating
                                 ? const SizedBox(
                                     height: 20,
                                     width: 20,
@@ -467,95 +851,7 @@ class _PaymentScreenState extends State<PaymentScreen>
                 ),
                 const SizedBox(height: 16),
                 // Status card
-                if (_chargeId != null)
-                  Container(
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: _paymentSuccess
-                                ? Colors.green.shade50
-                                : Colors.orange.shade50,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            _paymentSuccess
-                                ? Icons.check_circle_rounded
-                                : Icons.schedule_rounded,
-                            size: 40,
-                            color: _paymentSuccess
-                                ? Colors.green
-                                : Colors.orange,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          _paymentSuccess ? 'ชำระเงินสำเร็จ!' : 'รอการชำระเงิน',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: _paymentSuccess
-                                ? Colors.green.shade700
-                                : Colors.orange.shade700,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          _message,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey.shade600,
-                          ),
-                        ),
-                        if (!_paymentSuccess) ...[
-                          const SizedBox(height: 20),
-                          SizedBox(
-                            width: double.infinity,
-                            child: OutlinedButton.icon(
-                              onPressed: _isLoading
-                                  ? null
-                                  : _checkPaymentStatus,
-                              icon: const Icon(Icons.refresh_rounded, size: 20),
-                              label: const Text(
-                                'ตรวจสอบสถานะ',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              style: OutlinedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 16,
-                                ),
-                                foregroundColor: const Color(0xFF667eea),
-                                side: const BorderSide(
-                                  color: Color(0xFF667eea),
-                                  width: 2,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
+                if (_status != PaymentStatus.idle) _buildStatusCard(),
                 const SizedBox(height: 16),
                 // Info card
                 Container(
