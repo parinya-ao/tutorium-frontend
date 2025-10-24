@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:tutorium_frontend/pages/learn/learn.dart';
-import 'package:tutorium_frontend/pages/learn/class_detail_page.dart';
 import 'package:tutorium_frontend/util/custom_cache_manager.dart';
 
 class ScheduleCardLearner extends StatelessWidget {
@@ -81,41 +80,20 @@ class ScheduleCardLearner extends StatelessWidget {
     final isPast = now.isAfter(endDateTime);
 
     return GestureDetector(
-      onTap: () async {
-        // Check if user has viewed class details before
-        final hasViewed = await ClassDetailPage.hasViewed(classSessionId);
-
-        if (!context.mounted) return;
-
-        if (hasViewed) {
-          // Go directly to LearnPage if already viewed
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => LearnPage(
-                classSessionId: classSessionId,
-                className: className,
-                teacherName: teacherName,
-                jitsiMeetingUrl: classUrl,
-                isTeacher: isTeacher,
-              ),
+      onTap: () {
+        // Navigate directly to LearnPage (Jitsi meeting)
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => LearnPage(
+              classSessionId: classSessionId,
+              className: className,
+              teacherName: teacherName,
+              jitsiMeetingUrl: classUrl,
+              isTeacher: isTeacher,
             ),
-          );
-        } else {
-          // Show ClassDetailPage first
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => ClassDetailPage(
-                classSessionId: classSessionId,
-                className: className,
-                teacherName: teacherName,
-                jitsiMeetingUrl: classUrl,
-                isTeacher: isTeacher,
-              ),
-            ),
-          );
-        }
+          ),
+        );
       },
       child: Container(
         decoration: BoxDecoration(

@@ -180,10 +180,7 @@ class _LearnPageState extends State<LearnPage>
       return 'ไม่พบลิงก์ห้องเรียนจากระบบ';
     }
 
-    if (_isSessionFinished()) {
-      return 'คลาสจบแล้ว ไม่สามารถเข้าห้องได้';
-    }
-
+    // Allow joining at any time (before, during, or after class)
     return null;
   }
 
@@ -255,18 +252,7 @@ class _LearnPageState extends State<LearnPage>
       return;
     }
 
-    // For learners, check if they can leave
-    if (_classFinish != null && DateTime.now().isBefore(_classFinish!)) {
-      // Class not finished yet - force rejoin
-      if (mounted) {
-        _showErrorDialog('คลาสยังไม่จบ ระบบจะพาคุณกลับเข้าเรียน');
-      }
-      await Future.delayed(const Duration(seconds: 1));
-      await _joinConference();
-      return;
-    }
-
-    // Class finished - show mandatory review
+    // For learners, allow leaving at any time and show review
     await _openMandatoryReview();
   }
 
@@ -619,13 +605,7 @@ class _LearnPageState extends State<LearnPage>
   }
 
   Future<void> _leaveConference() async {
-    if (!widget.isTeacher &&
-        _classFinish != null &&
-        DateTime.now().isBefore(_classFinish!)) {
-      _showErrorDialog('คลาสยังไม่จบ ไม่สามารถออกก่อนเวลาได้');
-      return;
-    }
-
+    // Allow leaving at any time for both teachers and learners
     final shouldLeave = await _showLeaveDialog();
     if (shouldLeave == true) {
       try {
@@ -818,69 +798,223 @@ class _LearnPageState extends State<LearnPage>
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
+            widget.isTeacher ? Colors.purple.shade100 : Colors.blue.shade100,
+            widget.isTeacher ? Colors.pink.shade100 : Colors.cyan.shade100,
             widget.isTeacher ? Colors.purple.shade50 : Colors.blue.shade50,
-            widget.isTeacher ? Colors.pink.shade50 : Colors.cyan.shade50,
           ],
         ),
       ),
       child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(32),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: (widget.isTeacher ? Colors.purple : Colors.blue)
-                        .withValues(alpha: 0.2),
-                    blurRadius: 30,
-                    spreadRadius: 5,
-                  ),
-                ],
-              ),
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  SizedBox(
-                    width: 60,
-                    height: 60,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 4,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        widget.isTeacher
-                            ? Colors.purple.shade400
-                            : Colors.blue.shade400,
+        child: TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0.0, end: 1.0),
+          duration: const Duration(milliseconds: 600),
+          builder: (context, value, child) {
+            return Transform.scale(
+              scale: 0.8 + (value * 0.2),
+              child: Opacity(
+                opacity: value,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(40),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            Colors.white,
+                            widget.isTeacher
+                                ? Colors.purple.shade50
+                                : Colors.blue.shade50,
+                          ],
+                        ),
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: (widget.isTeacher
+                                        ? Colors.purple
+                                        : Colors.blue)
+                                .withValues(alpha: 0.3),
+                            blurRadius: 40,
+                            spreadRadius: 10,
+                            offset: const Offset(0, 10),
+                          ),
+                          BoxShadow(
+                            color: Colors.white.withValues(alpha: 0.8),
+                            blurRadius: 20,
+                            spreadRadius: -5,
+                            offset: const Offset(-10, -10),
+                          ),
+                        ],
+                      ),
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          SizedBox(
+                            width: 80,
+                            height: 80,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 5,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                widget.isTeacher
+                                    ? Colors.purple.shade500
+                                    : Colors.blue.shade500,
+                              ),
+                              backgroundColor: (widget.isTeacher
+                                      ? Colors.purple
+                                      : Colors.blue)
+                                  .withValues(alpha: 0.1),
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: widget.isTeacher
+                                    ? [
+                                        Colors.purple.shade400,
+                                        Colors.pink.shade400,
+                                      ]
+                                    : [
+                                        Colors.blue.shade400,
+                                        Colors.cyan.shade400,
+                                      ],
+                              ),
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: (widget.isTeacher
+                                              ? Colors.purple
+                                              : Colors.blue)
+                                          .withValues(alpha: 0.4),
+                                  blurRadius: 15,
+                                  offset: const Offset(0, 5),
+                                ),
+                              ],
+                            ),
+                            child: const Icon(
+                              Icons.videocam_rounded,
+                              size: 36,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ),
-                  Icon(
-                    Icons.videocam_rounded,
-                    size: 32,
-                    color: widget.isTeacher
-                        ? Colors.purple.shade400
-                        : Colors.blue.shade400,
-                  ),
-                ],
+                    const SizedBox(height: 40),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 32,
+                        vertical: 16,
+                      ),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            Colors.white.withValues(alpha: 0.9),
+                            Colors.white.withValues(alpha: 0.7),
+                          ],
+                        ),
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.1),
+                            blurRadius: 20,
+                            offset: const Offset(0, 10),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        children: [
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  gradient: LinearGradient(
+                                    colors: widget.isTeacher
+                                        ? [
+                                            Colors.purple.shade400,
+                                            Colors.pink.shade400,
+                                          ]
+                                        : [
+                                            Colors.blue.shade400,
+                                            Colors.cyan.shade400,
+                                          ],
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                'กำลังเข้าสู่ห้องเรียน',
+                                style: TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.grey.shade800,
+                                  letterSpacing: -0.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'กำลังเชื่อมต่อกับ Jitsi Meet...',
+                            style: TextStyle(
+                              fontSize: 15,
+                              color: Colors.grey.shade600,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: List.generate(3, (index) {
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: Container(
+                            width: 12,
+                            height: 12,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: LinearGradient(
+                                colors: widget.isTeacher
+                                    ? [
+                                        Colors.purple.shade400,
+                                        Colors.pink.shade400,
+                                      ]
+                                    : [
+                                        Colors.blue.shade400,
+                                        Colors.cyan.shade400,
+                                      ],
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: (widget.isTeacher
+                                              ? Colors.purple
+                                              : Colors.blue)
+                                          .withValues(alpha: 0.3),
+                                  blurRadius: 8,
+                                  spreadRadius: 2,
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: 32),
-            Text(
-              'กำลังเข้าสู่ห้องเรียน...',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey.shade800,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'กรุณารอสักครู่',
-              style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
-            ),
-          ],
+            );
+          },
         ),
       ),
     );
@@ -903,10 +1037,13 @@ class _LearnPageState extends State<LearnPage>
           ),
         ),
         child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 24.0,
-              vertical: 20.0,
+          bottom: true,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.only(
+              left: 24.0,
+              right: 24.0,
+              top: 20.0,
+              bottom: 32.0,
             ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -1120,6 +1257,7 @@ class _LearnPageState extends State<LearnPage>
                     ],
                   ),
                 ),
+                const SizedBox(height: 16),
               ],
             ),
           ),
@@ -1483,118 +1621,276 @@ class _LearnPageState extends State<LearnPage>
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Colors.green.shade600, Colors.teal.shade600],
+          colors: [
+            Colors.green.shade500,
+            Colors.teal.shade500,
+            Colors.green.shade600,
+          ],
+          stops: const [0.0, 0.5, 1.0],
         ),
       ),
       child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(32),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.2),
-                    blurRadius: 30,
-                    spreadRadius: 5,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Animated Success Icon
+              TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0.0, end: 1.0),
+                duration: const Duration(milliseconds: 800),
+                builder: (context, value, child) {
+                  return Transform.scale(
+                    scale: 0.5 + (value * 0.5),
+                    child: Opacity(
+                      opacity: value,
+                      child: Container(
+                        padding: const EdgeInsets.all(40),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              Colors.white,
+                              Colors.green.shade50,
+                            ],
+                          ),
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.25),
+                              blurRadius: 40,
+                              spreadRadius: 10,
+                              offset: const Offset(0, 15),
+                            ),
+                            BoxShadow(
+                              color: Colors.white.withValues(alpha: 0.5),
+                              blurRadius: 20,
+                              spreadRadius: -5,
+                              offset: const Offset(-10, -10),
+                            ),
+                          ],
+                        ),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.green.withValues(alpha: 0.3),
+                                blurRadius: 30,
+                                spreadRadius: 10,
+                              ),
+                            ],
+                          ),
+                          child: Icon(
+                            Icons.check_circle_rounded,
+                            size: 100,
+                            color: Colors.green.shade600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 40),
+              
+              // Status Container
+              Container(
+                padding: const EdgeInsets.all(28),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Colors.white.withValues(alpha: 0.25),
+                      Colors.white.withValues(alpha: 0.15),
+                    ],
                   ),
-                ],
-              ),
-              child: Icon(
-                Icons.check_circle_rounded,
-                size: 80,
-                color: Colors.green.shade600,
-              ),
-            ),
-            const SizedBox(height: 32),
-            Text(
-              'กำลังอยู่ในห้องเรียน',
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-                shadows: [
-                  Shadow(
-                    color: Colors.black.withValues(alpha: 0.3),
-                    blurRadius: 10,
+                  borderRadius: BorderRadius.circular(28),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.3),
+                    width: 2,
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                widget.className,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.2),
+                      blurRadius: 30,
+                      offset: const Offset(0, 15),
+                    ),
+                  ],
                 ),
-                textAlign: TextAlign.center,
-              ),
-            ),
-            const SizedBox(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _buildInfoChip(
-                  Icons.access_time_rounded,
-                  _formatDuration(_sessionDuration),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 12,
+                          height: 12,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.white.withValues(alpha: 0.6),
+                                blurRadius: 15,
+                                spreadRadius: 5,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        const Text(
+                          'กำลังอยู่ในห้องเรียน',
+                          style: TextStyle(
+                            fontSize: 26,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                            letterSpacing: -0.5,
+                            shadows: [
+                              Shadow(
+                                color: Colors.black26,
+                                blurRadius: 10,
+                                offset: Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 28,
+                        vertical: 14,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.25),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.4),
+                          width: 1.5,
+                        ),
+                      ),
+                      child: Text(
+                        widget.className,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        _buildInfoChip(
+                          Icons.access_time_rounded,
+                          _formatDuration(_sessionDuration),
+                        ),
+                        const SizedBox(width: 16),
+                        _buildInfoChip(
+                          Icons.people_rounded,
+                          '${_participants.length + 1} คน',
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 16),
-                _buildInfoChip(
-                  Icons.people_rounded,
-                  '${_participants.length + 1} คน',
+              ),
+              const SizedBox(height: 32),
+              
+              // Info Card
+              Container(
+                padding: const EdgeInsets.all(24),
+                margin: const EdgeInsets.symmetric(horizontal: 16),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Colors.white.withValues(alpha: 0.2),
+                      Colors.white.withValues(alpha: 0.1),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.3),
+                    width: 1.5,
+                  ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 48),
-            Text(
-              'Jitsi Meet กำลังทำงานในหน้าต่างแยก',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.white.withValues(alpha: 0.9),
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'การประชุมวิดีโอทำงานอยู่เบื้องหลัง',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.white.withValues(alpha: 0.8),
-              ),
-            ),
-            const SizedBox(height: 48),
-            ElevatedButton.icon(
-              onPressed: _leaveConference,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: Colors.red.shade700,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 32,
-                  vertical: 16,
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.video_camera_front_rounded,
+                      color: Colors.white.withValues(alpha: 0.9),
+                      size: 48,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Jitsi Meet กำลังทำงานในหน้าต่างแยก',
+                      style: TextStyle(
+                        fontSize: 17,
+                        color: Colors.white.withValues(alpha: 0.95),
+                        fontWeight: FontWeight.w600,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'การประชุมวิดีโอทำงานอยู่เบื้องหลัง\nกรุณาเปิดแอปพลิเคชัน Jitsi Meet',
+                      style: TextStyle(
+                        fontSize: 15,
+                        color: Colors.white.withValues(alpha: 0.8),
+                        height: 1.5,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
                 ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
+              ),
+              const SizedBox(height: 40),
+              
+              // Leave Button
+              Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.red.withValues(alpha: 0.4),
+                      blurRadius: 25,
+                      spreadRadius: 2,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
                 ),
-                elevation: 8,
+                child: ElevatedButton.icon(
+                  onPressed: _leaveConference,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: Colors.red.shade700,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 40,
+                      vertical: 18,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    elevation: 8,
+                    shadowColor: Colors.black.withValues(alpha: 0.3),
+                  ),
+                  icon: const Icon(Icons.call_end_rounded, size: 28),
+                  label: const Text(
+                    'ออกจากห้องเรียน',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                ),
               ),
-              icon: const Icon(Icons.call_end_rounded, size: 24),
-              label: const Text(
-                'ออกจากห้องเรียน',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
