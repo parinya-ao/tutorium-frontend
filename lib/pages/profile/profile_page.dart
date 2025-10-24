@@ -119,15 +119,19 @@ class _ProfilePageState extends State<ProfilePage> {
         debugPrint('✅ User profile saved to cache');
         debugPrint('   Name: ${fetchedUser.firstName} ${fetchedUser.lastName}');
         debugPrint('   Email: $userEmail');
-        
+
         // Also save to SharedPreferences for backward compatibility
         final prefs = await SharedPreferences.getInstance();
-        final fullName = '${fetchedUser.firstName ?? ''} ${fetchedUser.lastName ?? ''}'.trim();
+        final fullName =
+            '${fetchedUser.firstName ?? ''} ${fetchedUser.lastName ?? ''}'
+                .trim();
         if (fullName.isNotEmpty) {
           await prefs.setString('userName', fullName);
         }
         await prefs.setString('userEmail', userEmail);
-        debugPrint('✅ Also saved to SharedPreferences (backward compatibility)');
+        debugPrint(
+          '✅ Also saved to SharedPreferences (backward compatibility)',
+        );
       } catch (e) {
         debugPrint('⚠️ Failed to save user profile to cache: $e');
       }

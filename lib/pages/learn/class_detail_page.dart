@@ -546,10 +546,7 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            primaryColor.withValues(alpha: 0.1),
-            Colors.white,
-          ],
+          colors: [primaryColor.withValues(alpha: 0.1), Colors.white],
         ),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
@@ -616,11 +613,7 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
               children: [
                 Row(
                   children: [
-                    Icon(
-                      Icons.videocam_rounded,
-                      size: 20,
-                      color: primaryColor,
-                    ),
+                    Icon(Icons.videocam_rounded, size: 20, color: primaryColor),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(

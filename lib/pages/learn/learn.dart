@@ -113,41 +113,48 @@ class _LearnPageState extends State<LearnPage>
   Future<void> _loadUserData() async {
     try {
       debugPrint('👤 Loading user data...');
-      
+
       // Try to get user profile from LocalStorage first
       final userProfile = await LocalStorage.getUserProfile();
-      debugPrint('   Profile from LocalStorage: ${userProfile != null ? "Found" : "Not found"}');
-      
+      debugPrint(
+        '   Profile from LocalStorage: ${userProfile != null ? "Found" : "Not found"}',
+      );
+
       String? userName;
       String? userEmail;
       String? userProfilePicture;
-      
+
       if (userProfile != null) {
         // Extract name from profile
-        final firstName = userProfile['first_name'] ?? userProfile['firstName'] ?? '';
-        final lastName = userProfile['last_name'] ?? userProfile['lastName'] ?? '';
+        final firstName =
+            userProfile['first_name'] ?? userProfile['firstName'] ?? '';
+        final lastName =
+            userProfile['last_name'] ?? userProfile['lastName'] ?? '';
         final email = userProfile['email'] ?? '';
-        final profilePicture = userProfile['profile_picture'] ?? userProfile['profilePicture'];
-        
+        final profilePicture =
+            userProfile['profile_picture'] ?? userProfile['profilePicture'];
+
         debugPrint('   First name: "$firstName"');
         debugPrint('   Last name: "$lastName"');
         debugPrint('   Email: "$email"');
-        debugPrint('   Profile Picture: ${profilePicture != null ? "Found" : "Not found"}');
-        
+        debugPrint(
+          '   Profile Picture: ${profilePicture != null ? "Found" : "Not found"}',
+        );
+
         // Combine first and last name
         if (firstName.isNotEmpty || lastName.isNotEmpty) {
           userName = '$firstName $lastName'.trim();
         }
-        
+
         if (email.isNotEmpty) {
           userEmail = email;
         }
-        
+
         if (profilePicture != null && profilePicture.toString().isNotEmpty) {
           userProfilePicture = profilePicture.toString();
         }
       }
-      
+
       // Fallback to SharedPreferences if profile not found
       if (userName == null || userEmail == null) {
         debugPrint('   Fallback to SharedPreferences...');
@@ -157,7 +164,7 @@ class _LearnPageState extends State<LearnPage>
         debugPrint('   userName from prefs: "$userName"');
         debugPrint('   userEmail from prefs: "$userEmail"');
       }
-      
+
       // Get learner ID
       final learnerId = await LocalStorage.getLearnerId();
       debugPrint('   Learner ID: $learnerId');
@@ -173,11 +180,13 @@ class _LearnPageState extends State<LearnPage>
           _errorMessage = 'ไม่พบ Learner ID โปรดเข้าสู่ระบบใหม่';
         }
       });
-      
+
       debugPrint('✅ User data loaded successfully');
       debugPrint('   Final userName: "$_userName"');
       debugPrint('   Final userEmail: "$_userEmail"');
-      debugPrint('   Final profilePicture: ${_userProfilePicture != null ? "Found" : "Not found"}');
+      debugPrint(
+        '   Final profilePicture: ${_userProfilePicture != null ? "Found" : "Not found"}',
+      );
     } catch (e) {
       debugPrint('❌ Failed to load user data: $e');
       if (!mounted) return;
@@ -504,7 +513,9 @@ class _LearnPageState extends State<LearnPage>
 
   Future<void> _joinConference() async {
     debugPrint('🎯 ========== JOIN CONFERENCE START ==========');
-    debugPrint('👨‍🏫 Role: ${widget.isTeacher ? "TEACHER (Full Admin)" : "LEARNER (Speak/Listen Only)"}');
+    debugPrint(
+      '👨‍🏫 Role: ${widget.isTeacher ? "TEACHER (Full Admin)" : "LEARNER (Speak/Listen Only)"}',
+    );
     debugPrint('📚 Class: ${widget.className}');
     debugPrint('🆔 Session ID: ${widget.classSessionId}');
 
@@ -520,9 +531,10 @@ class _LearnPageState extends State<LearnPage>
     if (_userEmail == null || _userEmail!.toLowerCase() == 'null') {
       _userEmail = '';
     }
-    
+
     // Handle profile picture if it's the string "null"
-    if (_userProfilePicture != null && _userProfilePicture!.toLowerCase() == 'null') {
+    if (_userProfilePicture != null &&
+        _userProfilePicture!.toLowerCase() == 'null') {
       _userProfilePicture = null;
     }
 
@@ -538,15 +550,26 @@ class _LearnPageState extends State<LearnPage>
     debugPrint('   Name: "$name"');
 
     // Check if name looks real (at least 2 words, not just numbers)
-    final words = name.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
+    final words = name
+        .split(RegExp(r'\s+'))
+        .where((w) => w.isNotEmpty)
+        .toList();
     final hasMinWords = words.length >= 2;
     final notOnlyNumbers = !RegExp(r'^\d+$').hasMatch(name);
-    final notDefaultName = !['student', 'user', 'guest', 'test']
-        .contains(name.toLowerCase());
+    final notDefaultName = ![
+      'student',
+      'user',
+      'guest',
+      'test',
+    ].contains(name.toLowerCase());
 
     debugPrint('   - Word count: ${words.length} ${hasMinWords ? "✓" : "✗"}');
-    debugPrint('   - Not only numbers: $notOnlyNumbers ${notOnlyNumbers ? "✓" : "✗"}');
-    debugPrint('   - Not default name: $notDefaultName ${notDefaultName ? "✓" : "✗"}');
+    debugPrint(
+      '   - Not only numbers: $notOnlyNumbers ${notOnlyNumbers ? "✓" : "✗"}',
+    );
+    debugPrint(
+      '   - Not default name: $notDefaultName ${notDefaultName ? "✓" : "✗"}',
+    );
 
     if (!hasMinWords || !notOnlyNumbers || !notDefaultName) {
       debugPrint('❌ Real name validation FAILED');
@@ -573,7 +596,9 @@ class _LearnPageState extends State<LearnPage>
     debugPrint('✅ Meeting URL parsed successfully');
     debugPrint('   Server: ${meetingConfig.serverUrl}');
     debugPrint('   Room: ${meetingConfig.roomName}');
-    debugPrint('   Token: ${meetingConfig.token != null ? "Present (${meetingConfig.token!.length} chars)" : "None"}');
+    debugPrint(
+      '   Token: ${meetingConfig.token != null ? "Present (${meetingConfig.token!.length} chars)" : "None"}',
+    );
 
     setState(() {
       _isLoading = true;
@@ -587,14 +612,23 @@ class _LearnPageState extends State<LearnPage>
       // Define toolbar buttons based on role
       final toolbarButtons = widget.isTeacher
           ? [
-              'microphone', 'camera', 'chat', 'participants-pane',
-              'security', 'invite', 'recording', 'livestreaming',
-              'desktop', 'videoquality', 'tileview', 'stats',
-              'settings', 'help', 'hangup'
+              'microphone',
+              'camera',
+              'chat',
+              'participants-pane',
+              'security',
+              'invite',
+              'recording',
+              'livestreaming',
+              'desktop',
+              'videoquality',
+              'tileview',
+              'stats',
+              'settings',
+              'help',
+              'hangup',
             ]
-          : [
-              'microphone', 'camera', 'hangup'
-            ];
+          : ['microphone', 'camera', 'hangup'];
 
       debugPrint('🔘 Toolbar buttons (${toolbarButtons.length}):');
       for (final btn in toolbarButtons) {
@@ -614,9 +648,9 @@ class _LearnPageState extends State<LearnPage>
           "requireDisplayName": true, // Force display name
           "disableRemoteMute": !widget.isTeacher, // Learner can't mute others
           "disableInviteFunctions": !widget.isTeacher, // Learner can't invite
-          "disableModeratorIndicator": !widget.isTeacher, // Hide moderator badge for learners
+          "disableModeratorIndicator":
+              !widget.isTeacher, // Hide moderator badge for learners
           "enableClosePage": widget.isTeacher, // Only teacher can end for all
-
           // ===== UI Controls =====
           "hideConferenceSubject": false,
           "hideConferenceTimer": false,
@@ -680,7 +714,9 @@ class _LearnPageState extends State<LearnPage>
         userInfo: JitsiMeetUserInfo(
           displayName: _userName!,
           email: _userEmail ?? '',
-          avatar: _userProfilePicture ?? "https://api.dicebear.com/7.x/avataaars/png?seed=$_userName",
+          avatar:
+              _userProfilePicture ??
+              "https://api.dicebear.com/7.x/avataaars/png?seed=$_userName",
         ),
       );
 
@@ -998,10 +1034,9 @@ class _LearnPageState extends State<LearnPage>
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: (widget.isTeacher
-                                        ? Colors.purple
-                                        : Colors.blue)
-                                .withValues(alpha: 0.3),
+                            color:
+                                (widget.isTeacher ? Colors.purple : Colors.blue)
+                                    .withValues(alpha: 0.3),
                             blurRadius: 40,
                             spreadRadius: 10,
                             offset: const Offset(0, 10),
@@ -1027,10 +1062,11 @@ class _LearnPageState extends State<LearnPage>
                                     ? Colors.purple.shade500
                                     : Colors.blue.shade500,
                               ),
-                              backgroundColor: (widget.isTeacher
-                                      ? Colors.purple
-                                      : Colors.blue)
-                                  .withValues(alpha: 0.1),
+                              backgroundColor:
+                                  (widget.isTeacher
+                                          ? Colors.purple
+                                          : Colors.blue)
+                                      .withValues(alpha: 0.1),
                             ),
                           ),
                           Container(
@@ -1052,7 +1088,8 @@ class _LearnPageState extends State<LearnPage>
                               borderRadius: BorderRadius.circular(16),
                               boxShadow: [
                                 BoxShadow(
-                                  color: (widget.isTeacher
+                                  color:
+                                      (widget.isTeacher
                                               ? Colors.purple
                                               : Colors.blue)
                                           .withValues(alpha: 0.4),
@@ -1163,7 +1200,8 @@ class _LearnPageState extends State<LearnPage>
                               ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: (widget.isTeacher
+                                  color:
+                                      (widget.isTeacher
                                               ? Colors.purple
                                               : Colors.blue)
                                           .withValues(alpha: 0.3),
@@ -1422,8 +1460,6 @@ class _LearnPageState extends State<LearnPage>
     );
   }
 
-
-
   Widget _buildJoinButtonSection() {
     final disabledReason = _joinDisabledReason();
     final canJoin = disabledReason == null;
@@ -1500,8 +1536,6 @@ class _LearnPageState extends State<LearnPage>
       ],
     );
   }
-
-
 
   Widget _buildMeetingLinkCard(String roomUrl) {
     final hasLink = roomUrl.trim().isNotEmpty;
@@ -1715,10 +1749,7 @@ class _LearnPageState extends State<LearnPage>
                           gradient: LinearGradient(
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
-                            colors: [
-                              Colors.white,
-                              Colors.green.shade50,
-                            ],
+                            colors: [Colors.white, Colors.green.shade50],
                           ),
                           shape: BoxShape.circle,
                           boxShadow: [
@@ -1759,7 +1790,7 @@ class _LearnPageState extends State<LearnPage>
                 },
               ),
               const SizedBox(height: 40),
-              
+
               // Status Container
               Container(
                 padding: const EdgeInsets.all(28),
@@ -1865,7 +1896,7 @@ class _LearnPageState extends State<LearnPage>
                 ),
               ),
               const SizedBox(height: 32),
-              
+
               // Info Card
               Container(
                 padding: const EdgeInsets.all(24),
@@ -1914,7 +1945,7 @@ class _LearnPageState extends State<LearnPage>
                 ),
               ),
               const SizedBox(height: 40),
-              
+
               // Leave Button
               Container(
                 decoration: BoxDecoration(

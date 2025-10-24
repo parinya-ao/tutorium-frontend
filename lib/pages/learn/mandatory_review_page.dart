@@ -447,7 +447,8 @@ class _MandatoryReviewPageState extends State<MandatoryReviewPage> {
           errorString.contains('unique') ||
           errorString.contains('constraint') ||
           (errorString.contains('500') &&
-              (errorString.contains('key') || errorString.contains('violate')))) {
+              (errorString.contains('key') ||
+                  errorString.contains('violate')))) {
         userFriendlyMessage =
             '✅ คุณได้ส่งรีวิวสำหรับคลาสนี้ไปแล้ว!\nไม่สามารถส่งรีวิวซ้ำได้';
 
@@ -526,7 +527,11 @@ class _MandatoryReviewPageState extends State<MandatoryReviewPage> {
               ),
               child: Row(
                 children: [
-                  Icon(Icons.info_outline, color: Colors.blue.shade700, size: 20),
+                  Icon(
+                    Icons.info_outline,
+                    color: Colors.blue.shade700,
+                    size: 20,
+                  ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
