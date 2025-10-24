@@ -1148,6 +1148,18 @@ class _ClassEnrollPageState extends State<ClassEnrollPage> {
 
   @override
   Widget build(BuildContext context) {
+    String getCategoryDisplay(List<String>? categories) {
+      // Check if the list is null OR empty
+      if (categories == null || categories.isEmpty) {
+        return "General";
+      }
+
+      // If it's not empty, join items with a comma
+      return categories.join(
+        ', ',
+      ); // Turns ["Math", "Programming"] into "Math, Programming"
+    }
+
     return Scaffold(
       body: Stack(
         children: [
@@ -1253,7 +1265,7 @@ class _ClassEnrollPageState extends State<ClassEnrollPage> {
                             ),
                             const SizedBox(height: 16),
                             Text(
-                              "📂 Category: ${classInfo?.categories ?? "General"}",
+                              "📂 Category: ${getCategoryDisplay(classInfo?.categories)}",
                             ),
                             const Divider(height: 32),
                             const Text(

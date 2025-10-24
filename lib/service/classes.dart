@@ -111,13 +111,30 @@ class ClassInfo {
     };
   }
 
+  // Map<String, dynamic> toPayload() {
+  //   return {
+  //     'class_name': className,
+  //     'class_description': classDescription,
+  //     'teacher_id': teacherId,
+  //     if (bannerPicture != null && bannerPicture!.isNotEmpty)
+  //       'banner_picture': bannerPicture,
+  //   };
+  // }
   Map<String, dynamic> toPayload() {
+    // 1. Convert the List<String> into the List<Map> your API expects
+    final categoryPayload = categories
+        .map((categoryName) => {"class_category": categoryName})
+        .toList();
+
     return {
       'class_name': className,
       'class_description': classDescription,
       'teacher_id': teacherId,
       if (bannerPicture != null && bannerPicture!.isNotEmpty)
         'banner_picture': bannerPicture,
+
+      // 2. Add the formatted payload to the map
+      if (categoryPayload.isNotEmpty) 'categories': categoryPayload,
     };
   }
 

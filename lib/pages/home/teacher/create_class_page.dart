@@ -126,6 +126,16 @@ class _CreateClassPageState extends State<CreateClassPage> {
     });
 
     try {
+      final selectedCategoryObjects = _categories.where(
+        (category) => _selectedCategories.contains(category.id),
+      );
+
+      // 2. Format them into the JSON structure your API expects
+      final categoryPayload = _categories
+          .where((category) => _selectedCategories.contains(category.id))
+          .map((category) => category.name) // Get the name (String)
+          .toList();
+
       final classInfo = class_api.ClassInfo(
         id: 0,
         className: _classNameController.text.trim(),
@@ -136,7 +146,8 @@ class _CreateClassPageState extends State<CreateClassPage> {
         rating: 0,
         teacherName: null,
         enrolledLearners: null,
-        categories: const [],
+        // categories: const [],
+        categories: categoryPayload,
       );
 
       debugPrint('Creating class with data: ${classInfo.toPayload()}');
@@ -157,15 +168,15 @@ class _CreateClassPageState extends State<CreateClassPage> {
 
       if (mounted) {
         final message = _selectedCategories.isEmpty
-            ? 'Class "${createdClass.className}" created successfully!'
-            : 'Class "${createdClass.className}" created! Categories can be added later.';
+            ? 'Class "${createdClass.className}" created without categories.'
+            : 'Class "${createdClass.className}" created successfully with categories!';
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(message),
             backgroundColor: _selectedCategories.isEmpty
-                ? Colors.green
-                : Colors.orange,
+                ? Colors.orange
+                : Colors.green,
             duration: const Duration(seconds: 4),
           ),
         );
@@ -173,7 +184,6 @@ class _CreateClassPageState extends State<CreateClassPage> {
       }
     } catch (e) {
       if (mounted) {
-        // Parse error message for better user feedback
         String errorMessage = 'Failed to create class';
 
         String errorDetails = e.toString();
@@ -473,56 +483,56 @@ class _CreateClassPageState extends State<CreateClassPage> {
               ),
             ),
             const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.orange[100],
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.warning_amber,
-                    size: 14,
-                    color: Colors.orange[700],
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Not supported yet',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.orange[700],
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            // Container(
+            //   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            //   decoration: BoxDecoration(
+            //     color: Colors.orange[100],
+            //     borderRadius: BorderRadius.circular(12),
+            //   ),
+            //   child: Row(
+            //     mainAxisSize: MainAxisSize.min,
+            //     children: [
+            //       Icon(
+            //         Icons.warning_amber,
+            //         size: 14,
+            //         color: Colors.orange[700],
+            //       ),
+            //       const SizedBox(width: 4),
+            //       Text(
+            //         'Not supported yet',
+            //         style: TextStyle(
+            //           fontSize: 11,
+            //           fontWeight: FontWeight.bold,
+            //           color: Colors.orange[700],
+            //         ),
+            //       ),
+            //     ],
+            //   ),
+            // ),
           ],
         ),
         const SizedBox(height: 8),
         // Warning notice about API limitation
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Colors.orange[50],
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.orange[200]!),
-          ),
-          child: Row(
-            children: [
-              Icon(Icons.info_outline, size: 18, color: Colors.orange[700]),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Category assignment is not yet supported by the backend API. Categories can be added later.',
-                  style: TextStyle(fontSize: 12, color: Colors.orange[900]),
-                ),
-              ),
-            ],
-          ),
-        ),
+        // Container(
+        //   padding: const EdgeInsets.all(12),
+        //   decoration: BoxDecoration(
+        //     color: Colors.orange[50],
+        //     borderRadius: BorderRadius.circular(8),
+        //     border: Border.all(color: Colors.orange[200]!),
+        //   ),
+        //   child: Row(
+        //     children: [
+        //       Icon(Icons.info_outline, size: 18, color: Colors.orange[700]),
+        //       const SizedBox(width: 8),
+        //       Expanded(
+        //         child: Text(
+        //           'Category assignment is not yet supported by the backend API. Categories can be added later.',
+        //           style: TextStyle(fontSize: 12, color: Colors.orange[900]),
+        //         ),
+        //       ),
+        //     ],
+        //   ),
+        // ),
         const SizedBox(height: 12),
         // Show categories for future use (disabled state)
         if (_isCategoryLoading)
@@ -543,22 +553,60 @@ class _CreateClassPageState extends State<CreateClassPage> {
                 spacing: 8,
                 runSpacing: 8,
                 children: _categories.map((category) {
+                  final isSelected = _selectedCategories.contains(category.id);
+
                   return FilterChip(
                     label: Text(category.name),
-                    selected: false,
-                    onSelected: null, // Disabled
-                    backgroundColor: Colors.grey[200],
-                    disabledColor: Colors.grey[200],
+                    selected: isSelected,
+                    onSelected: (bool selected) {
+                      setState(() {
+                        if (selected) {
+                          _selectedCategories.add(category.id);
+                        } else {
+                          _selectedCategories.remove(category.id);
+                        }
+                        debugPrint(
+                          'Selected category IDs: $_selectedCategories',
+                        );
+                      });
+                    },
+                    backgroundColor: isSelected
+                        ? Colors.blue[100]
+                        : Colors.grey[200],
+                    selectedColor: Colors.blue[100],
                     labelStyle: TextStyle(
-                      color: Colors.grey[500],
-                      fontWeight: FontWeight.normal,
+                      color: isSelected ? Colors.blue[900] : Colors.black87,
+                      fontWeight: isSelected
+                          ? FontWeight.bold
+                          : FontWeight.normal,
                     ),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
-                      side: BorderSide(color: Colors.grey[300]!),
+                      side: BorderSide(
+                        color: isSelected
+                            ? Colors.blue[700]!
+                            : Colors.grey[300]!,
+                      ),
                     ),
                   );
                 }).toList(),
+                // children: _categories.map((category) {
+                //   return FilterChip(
+                //     label: Text(category.name),
+                //     selected: false,
+                //     onSelected: null, // Disabled
+                //     backgroundColor: Colors.grey[200],
+                //     disabledColor: Colors.grey[200],
+                //     labelStyle: TextStyle(
+                //       color: Colors.grey[500],
+                //       fontWeight: FontWeight.normal,
+                //     ),
+                //     shape: RoundedRectangleBorder(
+                //       borderRadius: BorderRadius.circular(8),
+                //       side: BorderSide(color: Colors.grey[300]!),
+                //     ),
+                //   );
+                // }).toList(),
               ),
             ),
           ),
