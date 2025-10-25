@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:tutorium_frontend/models/models.dart';
 import 'package:tutorium_frontend/pages/home/teacher/my_classes_page.dart';
 import 'package:tutorium_frontend/pages/home/teacher/create_class_page.dart';
@@ -10,6 +11,7 @@ import 'package:tutorium_frontend/pages/widgets/api_service.dart' as legacy_api;
 import 'package:tutorium_frontend/util/cache_user.dart';
 import 'package:tutorium_frontend/util/local_storage.dart';
 import 'package:tutorium_frontend/util/class_cache_manager.dart';
+import 'package:tutorium_frontend/util/custom_cache_manager.dart';
 
 class TeacherHomePage extends StatefulWidget {
   final VoidCallback onSwitch;
@@ -592,20 +594,46 @@ class TeacherHomePageState extends State<TeacherHomePage> {
     const double size = 70;
     final imageUrl = classModel.bannerPicture;
 
+    debugPrint(
+      '🖼️  [IMAGE] Loading thumbnail for class: ${classModel.className}',
+    );
+    debugPrint('  └─ URL: ${imageUrl ?? "null (will use fallback)"}');
+
     // Use Lorem Picsum with class ID as seed if no banner picture
     final finalImageUrl = (imageUrl == null || imageUrl.isEmpty)
         ? 'https://picsum.photos/seed/${classModel.id}/200/200'
         : imageUrl;
 
+    debugPrint('  └─ Final URL: $finalImageUrl');
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
-      child: Image.network(
-        finalImageUrl,
+      child: CachedNetworkImage(
+        imageUrl: finalImageUrl,
         width: size,
         height: size,
         fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) =>
-            _buildClassThumbnailPlaceholder(size: size),
+        cacheManager: ClassImageCacheManager(),
+        fadeInDuration: const Duration(milliseconds: 300),
+        fadeOutDuration: const Duration(milliseconds: 100),
+        placeholder: (context, url) {
+          debugPrint('  ⏳ Loading image...');
+          return Container(
+            width: size,
+            height: size,
+            decoration: BoxDecoration(
+              color: Colors.blue[50],
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Center(
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          );
+        },
+        errorWidget: (context, url, error) {
+          debugPrint('  ❌ Image load failed: $error');
+          return _buildClassThumbnailPlaceholder(size: size);
+        },
       ),
     );
   }

@@ -3,11 +3,11 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:tutorium_frontend/pages/search/class_enroll.dart';
 import 'package:tutorium_frontend/util/custom_cache_manager.dart';
 
-class ScheduleCardSearch extends StatelessWidget {
+class ScheduleCardSearch extends StatefulWidget {
   final int classId;
   final String className;
-  final int? enrolledLearner; // Make optional
-  final int? learnerLimit; // Make optional
+  final int? enrolledLearner;
+  final int? learnerLimit;
   final String teacherName;
   final DateTime date;
   final TimeOfDay startTime;
@@ -21,8 +21,8 @@ class ScheduleCardSearch extends StatelessWidget {
     super.key,
     required this.classId,
     required this.className,
-    this.enrolledLearner, // Optional
-    this.learnerLimit, // Optional
+    this.enrolledLearner,
+    this.learnerLimit,
     required this.teacherName,
     required this.date,
     required this.startTime,
@@ -33,6 +33,11 @@ class ScheduleCardSearch extends StatelessWidget {
     required this.rating,
   });
 
+  @override
+  State<ScheduleCardSearch> createState() => _ScheduleCardSearchState();
+}
+
+class _ScheduleCardSearchState extends State<ScheduleCardSearch> {
   String formatTime24(TimeOfDay time) {
     final h = time.hour.toString().padLeft(2, '0');
     final m = time.minute.toString().padLeft(2, '0');
@@ -43,10 +48,12 @@ class ScheduleCardSearch extends StatelessWidget {
   Widget build(BuildContext context) {
     // Show enrollment info only if data is available
     final showEnrollmentInfo =
-        enrolledLearner != null && learnerLimit != null && learnerLimit! > 0;
+        widget.enrolledLearner != null &&
+        widget.learnerLimit != null &&
+        widget.learnerLimit! > 0;
 
     Widget buildImage() {
-      final path = imageUrl;
+      final path = widget.imageUrl;
       if (path != null && path.isNotEmpty) {
         if (path.startsWith('http')) {
           return CachedNetworkImage(
@@ -65,29 +72,35 @@ class ScheduleCardSearch extends StatelessWidget {
               ),
             ),
             errorWidget: (context, url, error) =>
-                Image.asset(fallbackAsset, fit: BoxFit.cover),
+                Image.asset(widget.fallbackAsset, fit: BoxFit.cover),
           );
         }
         return Image.asset(path, fit: BoxFit.cover);
       }
 
-      return Image.asset(fallbackAsset, fit: BoxFit.cover);
+      return Image.asset(widget.fallbackAsset, fit: BoxFit.cover);
     }
 
     // คำนวณเปอร์เซ็นต์ที่จองแล้ว (only if data available)
     final enrollmentPercentage =
-        (showEnrollmentInfo && learnerLimit != null && learnerLimit! > 0)
-        ? ((enrolledLearner! / learnerLimit!) * 100).clamp(0, 100)
+        (showEnrollmentInfo &&
+            widget.learnerLimit != null &&
+            widget.learnerLimit! > 0)
+        ? ((widget.enrolledLearner! / widget.learnerLimit!) * 100).clamp(0, 100)
         : 0.0;
 
     // คำนวณที่เหลือ
     final seatsRemaining = showEnrollmentInfo
-        ? (learnerLimit! - enrolledLearner!).clamp(0, learnerLimit!)
+        ? (widget.learnerLimit! - widget.enrolledLearner!).clamp(
+            0,
+            widget.learnerLimit!,
+          )
         : 0;
 
     // กำหนดสีและข้อความตามสถานะ
     final bool isAlmostFull = showEnrollmentInfo && enrollmentPercentage >= 80;
-    final bool isFull = showEnrollmentInfo && enrolledLearner! >= learnerLimit!;
+    final bool isFull =
+        showEnrollmentInfo && widget.enrolledLearner! >= widget.learnerLimit!;
 
     Color progressColor;
     String statusText;
@@ -116,9 +129,9 @@ class ScheduleCardSearch extends StatelessWidget {
             context,
             MaterialPageRoute(
               builder: (context) => ClassEnrollPage(
-                classId: classId,
-                teacherName: teacherName,
-                rating: rating,
+                classId: widget.classId,
+                teacherName: widget.teacherName,
+                rating: widget.rating,
               ),
             ),
           );
@@ -142,7 +155,7 @@ class ScheduleCardSearch extends StatelessWidget {
                     width: double.infinity,
                     child: buildImage(),
                   ),
-                  // ป้ายแจ้งเตือน
+                  // ป้ายแจ้งเตือนสถานะที่นั่ง (ขวาบน)
                   if (statusText.isNotEmpty)
                     Positioned(
                       top: 8,
@@ -200,7 +213,7 @@ class ScheduleCardSearch extends StatelessWidget {
                         children: [
                           Expanded(
                             child: Text(
-                              className,
+                              widget.className,
                               style: const TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,
@@ -218,7 +231,7 @@ class ScheduleCardSearch extends StatelessWidget {
                               ),
                               const SizedBox(width: 2),
                               Text(
-                                rating.toStringAsFixed(1),
+                                widget.rating.toStringAsFixed(1),
                                 style: const TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w500,
@@ -228,10 +241,10 @@ class ScheduleCardSearch extends StatelessWidget {
                           ),
                         ],
                       ),
-                      if (showSchedule) ...[
+                      if (widget.showSchedule) ...[
                         const SizedBox(height: 4),
                         Text(
-                          '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}',
+                          '${widget.date.day.toString().padLeft(2, '0')}/${widget.date.month.toString().padLeft(2, '0')}/${widget.date.year}',
                           style: const TextStyle(
                             fontSize: 12,
                             color: Colors.grey,
@@ -241,7 +254,7 @@ class ScheduleCardSearch extends StatelessWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          '${formatTime24(startTime)} - ${formatTime24(endTime)}',
+                          '${formatTime24(widget.startTime)} - ${formatTime24(widget.endTime)}',
                           style: const TextStyle(
                             fontSize: 12,
                             color: Colors.grey,
@@ -253,7 +266,7 @@ class ScheduleCardSearch extends StatelessWidget {
                       ] else
                         const SizedBox(height: 4),
                       Text(
-                        'Teacher : $teacherName',
+                        'Teacher : ${widget.teacherName}',
                         style: const TextStyle(fontSize: 12),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -271,7 +284,7 @@ class ScheduleCardSearch extends StatelessWidget {
                             ),
                             const SizedBox(width: 4),
                             Text(
-                              '$enrolledLearner/$learnerLimit คน',
+                              '${widget.enrolledLearner}/${widget.learnerLimit} คน',
                               style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w600,
