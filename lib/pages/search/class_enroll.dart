@@ -5,8 +5,10 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'package:tutorium_frontend/pages/home/teacher/register/payment_screen.dart';
 import 'package:tutorium_frontend/pages/profile/teacher_profile.dart';
+import 'package:tutorium_frontend/pages/search/enrollment_error_handler.dart';
 import 'package:tutorium_frontend/pages/widgets/class_session_service.dart';
 import 'package:tutorium_frontend/models/class_models.dart' as class_models;
+import 'package:tutorium_frontend/service/api_client.dart';
 import 'package:tutorium_frontend/service/enrollments.dart' as enrollment_api;
 import 'package:tutorium_frontend/service/notifications.dart'
     as notification_api;
@@ -43,6 +45,25 @@ class Review {
       comment: json['comment'],
     );
   }
+}
+
+class _CapacityCheckResult {
+  final int currentCount;
+  final int limit;
+  final bool isFull;
+
+  _CapacityCheckResult({
+    required this.currentCount,
+    required this.limit,
+    required this.isFull,
+  });
+}
+
+class _EnrollmentTransactionResult {
+  final bool success;
+  final EnrollmentError? error;
+
+  _EnrollmentTransactionResult({required this.success, this.error});
 }
 
 class User {
@@ -532,41 +553,61 @@ class _ClassEnrollPageState extends State<ClassEnrollPage> {
 
   Widget _buildReviewsSection() {
     if (isLoadingReviews) {
-      return const Center(child: CircularProgressIndicator());
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: CircularProgressIndicator(),
+        ),
+      );
     }
 
     if (reviews.isEmpty) {
       return Container(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(32),
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [Colors.grey.shade50, Colors.grey.shade100],
+            colors: [Colors.blue.shade50, Colors.indigo.shade50],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.blue.shade100, width: 2),
         ),
         child: Center(
           child: Column(
             children: [
-              Icon(
-                Icons.rate_review_outlined,
-                size: 48,
-                color: Colors.grey.shade400,
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.blue.shade200,
+                      blurRadius: 12,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  Icons.rate_review_rounded,
+                  size: 40,
+                  color: Colors.blue.shade600,
+                ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
               Text(
                 "No reviews yet",
                 style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.grey.shade600,
-                  fontWeight: FontWeight.w500,
+                  fontSize: 18,
+                  color: Colors.grey.shade800,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 8),
               Text(
-                "Be the first to review this class!",
-                style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
+                "Be the first to share your experience!",
+                style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
               ),
             ],
           ),
@@ -576,6 +617,7 @@ class _ClassEnrollPageState extends State<ClassEnrollPage> {
 
     return Column(
       children: [
+        // Reviews list with improved design
         ...reviews.take(showAllReviews ? reviews.length : 3).map((review) {
           final reviewerName = getUserName(review);
           final userId = review.userId ?? 0;
@@ -584,55 +626,144 @@ class _ClassEnrollPageState extends State<ClassEnrollPage> {
 
           return Container(
             margin: const EdgeInsets.only(bottom: 16),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.grey.shade200, width: 1),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.grey.shade200,
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Profile Picture
-                _buildProfileAvatar(user, reviewerName),
-                const SizedBox(width: 12),
+                // Profile Picture with gradient border
+                Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      colors: [Colors.blue.shade400, Colors.purple.shade400],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.blue.shade200,
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  padding: const EdgeInsets.all(3),
+                  child: _buildProfileAvatar(user, reviewerName),
+                ),
+                const SizedBox(width: 14),
                 // Review Content
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Name
-                      Text(
-                        reviewerName,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
-                        ),
+                      // Name and Rating Row
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              reviewerName,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  Colors.amber.shade400,
+                                  Colors.orange.shade400,
+                                ],
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.star,
+                                  size: 14,
+                                  color: Colors.white,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '$rating.0',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 4),
-                      // Star Rating
+                      const SizedBox(height: 10),
+                      // Star Rating (visual)
                       Row(
                         children: List.generate(
                           5,
-                          (i) => Icon(
-                            i < rating ? Icons.star : Icons.star_border,
-                            size: 16,
-                            color: i < rating
-                                ? Colors.amber
-                                : Colors.grey.shade400,
+                          (i) => Padding(
+                            padding: const EdgeInsets.only(right: 2),
+                            child: Icon(
+                              i < rating
+                                  ? Icons.star_rounded
+                                  : Icons.star_outline_rounded,
+                              size: 18,
+                              color: i < rating
+                                  ? Colors.amber.shade600
+                                  : Colors.grey.shade300,
+                            ),
                           ),
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 10),
                       // Comment
-                      Text(
-                        review.comment?.isNotEmpty == true
-                            ? review.comment!
-                            : "(No comment provided)",
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.grey.shade700,
-                          height: 1.4,
-                          fontStyle: review.comment?.isNotEmpty == true
-                              ? FontStyle.normal
-                              : FontStyle.italic,
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                        maxLines: showAllReviews ? null : 3,
-                        overflow: showAllReviews ? null : TextOverflow.ellipsis,
+                        child: Text(
+                          review.comment?.isNotEmpty == true
+                              ? review.comment!
+                              : "(No comment provided)",
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: review.comment?.isNotEmpty == true
+                                ? Colors.grey.shade800
+                                : Colors.grey.shade500,
+                            height: 1.5,
+                            fontStyle: review.comment?.isNotEmpty == true
+                                ? FontStyle.normal
+                                : FontStyle.italic,
+                          ),
+                          maxLines: showAllReviews ? null : 3,
+                          overflow: showAllReviews
+                              ? null
+                              : TextOverflow.ellipsis,
+                        ),
                       ),
                     ],
                   ),
@@ -641,27 +772,41 @@ class _ClassEnrollPageState extends State<ClassEnrollPage> {
             ),
           );
         }),
+        // See more/less button with better design
         if (reviews.length > 3)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: TextButton(
+          Container(
+            margin: const EdgeInsets.only(top: 12, bottom: 8),
+            child: TextButton.icon(
               onPressed: () {
                 setState(() {
                   showAllReviews = !showAllReviews;
                 });
               },
-              child: Text(
-                showAllReviews ? "Show less" : "See all reviews",
-                style: const TextStyle(fontWeight: FontWeight.w600),
+              icon: Icon(
+                showAllReviews
+                    ? Icons.expand_less_rounded
+                    : Icons.expand_more_rounded,
+                size: 20,
+              ),
+              label: Text(
+                showAllReviews
+                    ? "Show less"
+                    : "See all ${reviews.length} reviews",
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
               ),
               style: TextButton.styleFrom(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 12,
+                  horizontal: 24,
+                  vertical: 14,
                 ),
                 foregroundColor: Colors.blue.shade700,
+                backgroundColor: Colors.blue.shade50,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(16),
+                  side: BorderSide(color: Colors.blue.shade200),
                 ),
               ),
             ),
@@ -746,64 +891,33 @@ class _ClassEnrollPageState extends State<ClassEnrollPage> {
   }
 
   Future<void> _handleEnrollment(BuildContext parentContext) async {
-    if (selectedSession == null) return;
+    EnrollmentLogger.step('Starting enrollment pipeline', {
+      'sessionId': selectedSession?.id,
+      'classId': widget.classId,
+    });
 
-    final learnerId = await _ensureLearnerId();
-    if (learnerId == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(parentContext).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Unable to find learner information. Please relogin.',
-            ),
-          ),
-        );
-      }
+    // Step 1: Pre-validation
+    final validationError = await _validateEnrollmentPreconditions();
+    if (validationError != null) {
+      _showEnrollmentError(parentContext, validationError);
       return;
     }
 
     final session = selectedSession!;
-    final currentUser = userInfo;
+    final currentUser = userInfo!;
+    final learnerId = await _ensureLearnerId();
 
-    // ตรวจสอบว่าผู้ใช้เป็น teacher ของคลาสนี้หรือไม่
-    if (currentUser != null && classInfo != null) {
-      try {
-        final userId = await LocalStorage.getUserId();
-        if (userId != null) {
-          final fullUser = await user_api.User.fetchById(userId);
-          if (fullUser.teacher != null &&
-              fullUser.teacher!.id == classInfo!.teacherId) {
-            if (mounted) {
-              ScaffoldMessenger.of(parentContext).showSnackBar(
-                const SnackBar(
-                  content: Text('ครูไม่สามารถลงทะเบียนคลาสของตัวเองได้'),
-                  backgroundColor: Colors.red,
-                ),
-              );
-            }
-            return;
-          }
-        }
-      } catch (e) {
-        debugPrint('⚠️ Failed to check teacher status: $e');
-      }
-    }
-
-    if (currentUser == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(parentContext).showSnackBar(
-          const SnackBar(content: Text('User information unavailable.')),
-        );
-      }
-      return;
-    }
-
-    if (currentUser.balance < session.price) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          parentContext,
-        ).showSnackBar(const SnackBar(content: Text('Insufficient balance.')));
-      }
+    if (learnerId == null) {
+      _showEnrollmentError(
+        parentContext,
+        EnrollmentError(
+          type: EnrollmentErrorType.noLearnerInfo,
+          message: 'Learner ID not found',
+          userMessage: EnrollmentErrorMessages.getMessage(
+            EnrollmentErrorType.noLearnerInfo,
+          ),
+        ),
+      );
       return;
     }
 
@@ -813,26 +927,194 @@ class _ClassEnrollPageState extends State<ClassEnrollPage> {
       });
     }
 
-    try {
-      // ตรวจสอบว่าลงทะเบียนซ้ำหรือไม่ก่อนหักเงิน
-      final existingEnrollments = await enrollment_api.Enrollment.fetchAll(
-        query: {'learner_id': learnerId, 'class_session_id': session.id},
-      );
+    EnrollmentLogger.step('Pre-validation passed', {
+      'learnerId': learnerId,
+      'sessionId': session.id,
+      'balance': currentUser.balance,
+      'price': session.price,
+    });
 
-      if (existingEnrollments.isNotEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(parentContext).showSnackBar(
-            const SnackBar(
-              content: Text('You are already enrolled in this session.'),
+    // Step 2: Check for duplicate enrollment
+    try {
+      final isDuplicate = await _checkDuplicateEnrollment(
+        learnerId,
+        session.id,
+      );
+      if (isDuplicate) {
+        _showEnrollmentError(
+          parentContext,
+          EnrollmentError(
+            type: EnrollmentErrorType.duplicateEnrollment,
+            message: 'Already enrolled in session ${session.id}',
+            userMessage: EnrollmentErrorMessages.getMessage(
+              EnrollmentErrorType.duplicateEnrollment,
             ),
-          );
-        }
+            context: {'sessionId': session.id, 'learnerId': learnerId},
+          ),
+        );
         return;
       }
+      EnrollmentLogger.step('No duplicate enrollment found', null);
+    } catch (e, stackTrace) {
+      _handleEnrollmentException(
+        parentContext,
+        e,
+        stackTrace,
+        'duplicate check',
+      );
+      return;
+    }
 
-      // ตรวจสอบว่าคลาสเต็มหรือไม่ก่อนหักเงิน (max 20 คน)
+    // Step 3: Check class capacity
+    try {
+      final capacityCheck = await _checkClassCapacity(session);
+      if (capacityCheck.isFull) {
+        _showEnrollmentError(
+          parentContext,
+          EnrollmentError(
+            type: EnrollmentErrorType.classFull,
+            message: 'Session ${session.id} is full',
+            userMessage: EnrollmentErrorMessages.getMessage(
+              EnrollmentErrorType.classFull,
+            ),
+            context: {
+              'currentEnrollment': capacityCheck.currentCount,
+              'limit': capacityCheck.limit,
+            },
+          ),
+        );
+        return;
+      }
+      EnrollmentLogger.step('Class capacity available', {
+        'current': capacityCheck.currentCount,
+        'limit': capacityCheck.limit,
+      });
+    } catch (e, stackTrace) {
+      _handleEnrollmentException(
+        parentContext,
+        e,
+        stackTrace,
+        'capacity check',
+      );
+      return;
+    }
+
+    // Step 4: Execute enrollment transaction
+    final result = await _executeEnrollmentTransaction(
+      parentContext: parentContext,
+      session: session,
+      currentUser: currentUser,
+      learnerId: learnerId,
+    );
+
+    if (mounted) {
+      setState(() {
+        isProcessingEnrollment = false;
+      });
+    }
+
+    if (result.success) {
+      EnrollmentLogger.step('Enrollment completed successfully', {
+        'sessionId': session.id,
+        'learnerId': learnerId,
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(parentContext).showSnackBar(
+          SnackBar(
+            content: Text('✅ ลงทะเบียน ${session.description} สำเร็จ!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } else if (result.error != null) {
+      _showEnrollmentError(parentContext, result.error!);
+    }
+  }
+
+  Future<EnrollmentError?> _validateEnrollmentPreconditions() async {
+    if (selectedSession == null) {
+      return EnrollmentError(
+        type: EnrollmentErrorType.noSelectedSession,
+        message: 'No session selected',
+        userMessage: EnrollmentErrorMessages.getMessage(
+          EnrollmentErrorType.noSelectedSession,
+        ),
+      );
+    }
+
+    final session = selectedSession!;
+    final currentUser = userInfo;
+
+    // Check teacher status
+    if (currentUser != null && classInfo != null) {
+      try {
+        final userId = await LocalStorage.getUserId();
+        if (userId != null) {
+          final fullUser = await user_api.User.fetchById(userId);
+          if (fullUser.teacher != null &&
+              fullUser.teacher!.id == classInfo!.teacherId) {
+            return EnrollmentError(
+              type: EnrollmentErrorType.teacherCannotEnroll,
+              message: 'Teacher cannot enroll in own class',
+              userMessage: EnrollmentErrorMessages.getMessage(
+                EnrollmentErrorType.teacherCannotEnroll,
+              ),
+            );
+          }
+        }
+      } catch (e) {
+        EnrollmentLogger.warning('Failed to check teacher status', {
+          'error': e.toString(),
+        });
+      }
+    }
+
+    if (currentUser == null) {
+      return EnrollmentError(
+        type: EnrollmentErrorType.noLearnerInfo,
+        message: 'User information unavailable',
+        userMessage: EnrollmentErrorMessages.getMessage(
+          EnrollmentErrorType.noLearnerInfo,
+        ),
+      );
+    }
+
+    if (currentUser.balance < session.price) {
+      return EnrollmentError(
+        type: EnrollmentErrorType.insufficientBalance,
+        message: 'Balance ${currentUser.balance} < ${session.price}',
+        userMessage: EnrollmentErrorMessages.getMessage(
+          EnrollmentErrorType.insufficientBalance,
+        ),
+        context: {
+          'currentBalance': currentUser.balance,
+          'neededAmount': session.price,
+        },
+      );
+    }
+
+    return null;
+  }
+
+  Future<bool> _checkDuplicateEnrollment(int learnerId, int sessionId) async {
+    try {
+      final existingEnrollments = await enrollment_api.Enrollment.fetchAll(
+        query: {'learner_id': learnerId, 'class_session_id': sessionId},
+      );
+      return existingEnrollments.isNotEmpty;
+    } catch (e) {
+      EnrollmentLogger.error('Duplicate check failed', error: e);
+      rethrow;
+    }
+  }
+
+  Future<_CapacityCheckResult> _checkClassCapacity(
+    class_models.ClassSession session,
+  ) async {
+    try {
       final allEnrollments = await enrollment_api.Enrollment.fetchAll();
-      final currentEnrollmentCount = allEnrollments
+      final currentCount = allEnrollments
           .where(
             (e) =>
                 e.classSessionId == session.id &&
@@ -845,80 +1127,63 @@ class _ClassEnrollPageState extends State<ClassEnrollPage> {
           ? maxParticipants
           : session.learnerLimit;
 
-      debugPrint(
-        '📊 Enrollment check: $currentEnrollmentCount/$effectiveLimit for session ${session.id}',
+      return _CapacityCheckResult(
+        currentCount: currentCount,
+        limit: effectiveLimit,
+        isFull: currentCount >= effectiveLimit,
+      );
+    } catch (e) {
+      EnrollmentLogger.error('Capacity check failed', error: e);
+      rethrow;
+    }
+  }
+
+  Future<_EnrollmentTransactionResult> _executeEnrollmentTransaction({
+    required BuildContext parentContext,
+    required class_models.ClassSession session,
+    required UserInfo currentUser,
+    required int learnerId,
+  }) async {
+    final originalBalance = currentUser.balance;
+    final deductedBalance = _roundToCents(originalBalance - session.price);
+    bool balanceDeducted = false;
+    user_api.User? updatedServerUser;
+
+    try {
+      // Step 4.1: Deduct balance
+      EnrollmentLogger.step('Deducting balance', {
+        'userId': currentUser.id,
+        'original': originalBalance,
+        'deducted': deductedBalance,
+      });
+
+      updatedServerUser = await _updateRemoteUserBalance(
+        userId: currentUser.id,
+        balance: deductedBalance,
+      );
+      balanceDeducted = true;
+
+      EnrollmentLogger.step('Balance deducted successfully', {
+        'newBalance': updatedServerUser.balance,
+      });
+
+      // Step 4.2: Create enrollment
+      EnrollmentLogger.step('Creating enrollment record', {
+        'sessionId': session.id,
+        'learnerId': learnerId,
+      });
+
+      final enrollment = enrollment_api.Enrollment(
+        classSessionId: session.id,
+        enrollmentStatus: 'active',
+        learnerId: learnerId,
       );
 
-      if (currentEnrollmentCount >= effectiveLimit) {
-        if (mounted) {
-          ScaffoldMessenger.of(parentContext).showSnackBar(
-            SnackBar(
-              content: Text(
-                'ขอโทษ คลาสนี้เต็มแล้ว (รับได้สูงสุด $effectiveLimit คน)',
-              ),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-        return;
-      }
+      await enrollment_api.Enrollment.create(enrollment);
 
-      // ถ้าไม่ซ้ำ ค่อยหักเงิน
-      final originalBalance = currentUser.balance;
-      final deductedBalance = _roundToCents(originalBalance - session.price);
-      bool balanceDeducted = false;
-      user_api.User? updatedServerUser;
+      EnrollmentLogger.step('Enrollment record created', null);
 
-      try {
-        updatedServerUser = await _updateRemoteUserBalance(
-          userId: currentUser.id,
-          balance: deductedBalance,
-        );
-        balanceDeducted = true;
-
-        final enrollment = enrollment_api.Enrollment(
-          classSessionId: session.id,
-          enrollmentStatus: 'active',
-          learnerId: learnerId,
-        );
-
-        await enrollment_api.Enrollment.create(enrollment);
-      } catch (e) {
-        debugPrint('❌ Enrollment flow failed: $e');
-
-        if (balanceDeducted) {
-          try {
-            await _updateRemoteUserBalance(
-              userId: currentUser.id,
-              balance: originalBalance,
-            );
-          } catch (restoreError) {
-            debugPrint(
-              '⚠️ Failed to restore balance after enrollment error: $restoreError',
-            );
-          }
-
-          if (mounted) {
-            setState(() {
-              userInfo = currentUser.copyWith(
-                balance: originalBalance,
-                learnerId: learnerId,
-              );
-            });
-          }
-        }
-
-        if (mounted) {
-          final message = balanceDeducted
-              ? 'Failed to enroll. We restored your balance.'
-              : 'Unable to deduct balance. Please try again.';
-          ScaffoldMessenger.of(
-            parentContext,
-          ).showSnackBar(SnackBar(content: Text(message)));
-        }
-        return;
-      }
-
+      // Step 4.3: Update local state
       if (mounted) {
         setState(() {
           userInfo = currentUser.copyWith(
@@ -928,34 +1193,178 @@ class _ClassEnrollPageState extends State<ClassEnrollPage> {
         });
       }
 
+      // Step 4.4: Refresh class data
       await fetchClassData();
 
+      // Step 4.5: Create notification
       await _createEnrollmentNotification(
         userId: currentUser.id,
         session: session,
         learnerId: learnerId,
       );
 
-      if (mounted) {
-        ScaffoldMessenger.of(parentContext).showSnackBar(
-          SnackBar(
-            content: Text('Successfully enrolled in ${session.description} 🎉'),
-          ),
-        );
-      }
-    } catch (e) {
-      debugPrint('❌ Enrollment check failed: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(parentContext).showSnackBar(
-          const SnackBar(content: Text('Failed to process enrollment.')),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          isProcessingEnrollment = false;
+      return _EnrollmentTransactionResult(success: true);
+    } catch (e, stackTrace) {
+      EnrollmentLogger.error(
+        'Transaction failed',
+        error: e,
+        stackTrace: stackTrace,
+        context: {'balanceDeducted': balanceDeducted, 'sessionId': session.id},
+      );
+
+      // Rollback balance if it was deducted
+      if (balanceDeducted) {
+        EnrollmentLogger.rollback('Restoring balance', {
+          'userId': currentUser.id,
+          'amount': originalBalance,
         });
+
+        try {
+          await _updateRemoteUserBalance(
+            userId: currentUser.id,
+            balance: originalBalance,
+          );
+
+          if (mounted) {
+            setState(() {
+              userInfo = currentUser.copyWith(
+                balance: originalBalance,
+                learnerId: learnerId,
+              );
+            });
+          }
+
+          EnrollmentLogger.step('Balance restored successfully', null);
+
+          return _EnrollmentTransactionResult(
+            success: false,
+            error: EnrollmentError(
+              type: EnrollmentErrorType.enrollmentCreationFailed,
+              message: 'Enrollment creation failed, balance restored',
+              userMessage: EnrollmentErrorMessages.getMessage(
+                EnrollmentErrorType.enrollmentCreationFailed,
+              ),
+              originalError: e,
+              stackTrace: stackTrace,
+            ),
+          );
+        } catch (restoreError, restoreStack) {
+          EnrollmentLogger.error(
+            'CRITICAL: Balance restore failed',
+            error: restoreError,
+            stackTrace: restoreStack,
+          );
+
+          return _EnrollmentTransactionResult(
+            success: false,
+            error: EnrollmentError(
+              type: EnrollmentErrorType.balanceRestoreFailed,
+              message: 'Failed to restore balance after error',
+              userMessage: EnrollmentErrorMessages.getMessage(
+                EnrollmentErrorType.balanceRestoreFailed,
+              ),
+              originalError: restoreError,
+              stackTrace: restoreStack,
+              context: {
+                'originalError': e.toString(),
+                'userId': currentUser.id,
+                'originalBalance': originalBalance,
+              },
+            ),
+          );
+        }
       }
+
+      return _EnrollmentTransactionResult(
+        success: false,
+        error: EnrollmentError(
+          type: EnrollmentErrorType.balanceDeductionFailed,
+          message: 'Balance deduction failed',
+          userMessage: EnrollmentErrorMessages.getMessage(
+            EnrollmentErrorType.balanceDeductionFailed,
+          ),
+          originalError: e,
+          stackTrace: stackTrace,
+        ),
+      );
+    }
+  }
+
+  void _handleEnrollmentException(
+    BuildContext context,
+    dynamic error,
+    StackTrace stackTrace,
+    String step,
+  ) {
+    EnrollmentLogger.error(
+      'Error during $step',
+      error: error,
+      stackTrace: stackTrace,
+    );
+
+    if (!mounted) return;
+
+    setState(() {
+      isProcessingEnrollment = false;
+    });
+
+    EnrollmentErrorType errorType = EnrollmentErrorType.unknown;
+
+    if (error is ApiException) {
+      if (error.statusCode == 408) {
+        errorType = EnrollmentErrorType.networkTimeout;
+      } else if (error.statusCode == 503) {
+        errorType = EnrollmentErrorType.networkUnavailable;
+      }
+    }
+
+    _showEnrollmentError(
+      context,
+      EnrollmentError(
+        type: errorType,
+        message: 'Failed at $step: ${error.toString()}',
+        userMessage: EnrollmentErrorMessages.getMessage(errorType),
+        originalError: error,
+        stackTrace: stackTrace,
+      ),
+    );
+  }
+
+  void _showEnrollmentError(BuildContext context, EnrollmentError error) {
+    EnrollmentLogger.error(
+      'Showing error to user',
+      error: error,
+      context: error.context,
+    );
+
+    if (mounted) {
+      setState(() {
+        isProcessingEnrollment = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(EnrollmentErrorMessages.getDetailedMessage(error)),
+          backgroundColor: Colors.red.shade700,
+          duration: const Duration(seconds: 4),
+          action: error.type == EnrollmentErrorType.insufficientBalance
+              ? SnackBarAction(
+                  label: 'เติมเงิน',
+                  textColor: Colors.white,
+                  onPressed: () async {
+                    final result = await Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => PaymentScreen(userId: userInfo!.id),
+                      ),
+                    );
+                    if (result == true) {
+                      await fetchClassData();
+                    }
+                  },
+                )
+              : null,
+        ),
+      );
     }
   }
 
@@ -1287,38 +1696,79 @@ class _ClassEnrollPageState extends State<ClassEnrollPage> {
                             ),
                             const SizedBox(height: 8),
                             _buildReviewsSection(),
+                            // Add bottom padding to prevent content from being hidden by button
+                            const SizedBox(height: 100),
                           ],
                         ),
                 ),
               ),
             ],
           ),
+          // Enrollment button with SafeArea to avoid Android navigation buttons
           Positioned(
             bottom: 0,
             left: 0,
             right: 0,
             child: Container(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-              color: Colors.white,
-              child: ElevatedButton(
-                onPressed: (selectedSession == null || isProcessingEnrollment)
-                    ? null
-                    : () => _showEnrollConfirmationDialog(context),
-                style: ElevatedButton.styleFrom(
-                  minimumSize: const Size(double.infinity, 50),
-                ),
-                child: isProcessingEnrollment
-                    ? const SizedBox(
-                        height: 24,
-                        width: 24,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.5,
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            Colors.white,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 12,
+                    offset: const Offset(0, -4),
+                  ),
+                ],
+              ),
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                  child: ElevatedButton(
+                    onPressed:
+                        (selectedSession == null || isProcessingEnrollment)
+                        ? null
+                        : () => _showEnrollConfirmationDialog(context),
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 54),
+                      backgroundColor: Theme.of(context).primaryColor,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      disabledBackgroundColor: Colors.grey.shade300,
+                      disabledForegroundColor: Colors.grey.shade500,
+                    ),
+                    child: isProcessingEnrollment
+                        ? const SizedBox(
+                            height: 24,
+                            width: 24,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.white,
+                              ),
+                            ),
+                          )
+                        : Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.check_circle_outline, size: 22),
+                              const SizedBox(width: 8),
+                              Text(
+                                selectedSession == null
+                                    ? "Select a session first"
+                                    : "Enroll Now",
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                      )
-                    : const Text("Enroll Now"),
+                  ),
+                ),
               ),
             ),
           ),

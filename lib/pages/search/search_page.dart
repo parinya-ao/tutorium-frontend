@@ -7,6 +7,8 @@ import 'package:tutorium_frontend/pages/widgets/class_session_service.dart';
 import 'package:tutorium_frontend/pages/widgets/schedule_card_search.dart';
 import 'package:tutorium_frontend/pages/widgets/search_service.dart';
 import 'package:tutorium_frontend/pages/widgets/skeleton_loading.dart';
+import 'package:tutorium_frontend/service/learner_recommendation_service.dart';
+import 'package:tutorium_frontend/util/local_storage.dart';
 
 class _MaxValueTextInputFormatter extends TextInputFormatter {
   _MaxValueTextInputFormatter(this.maxValue);
@@ -262,15 +264,68 @@ class _SearchPageState extends State<SearchPage> {
     setState(() => _isLoadingRecommended = true);
 
     try {
-      final popularCandidates = await api.getPopularClasses(limit: 8);
-      if (popularCandidates.isEmpty) {
+      // Try to get learner ID from local storage
+      final learnerId = await LocalStorage.getLearnerId();
+
+      List<dynamic> candidateClasses = [];
+
+      // If learner ID exists, try to get personalized recommendations
+      if (learnerId != null) {
+        try {
+          debugPrint(
+            '🎯 Fetching personalized recommendations for learner $learnerId',
+          );
+          final recommendationService = LearnerRecommendationService.instance;
+          final recommendations = await recommendationService
+              .getRecommendedClasses(learnerId);
+
+          // Use recommended classes if found, otherwise use remaining classes
+          if (recommendations.recommendedFound &&
+              recommendations.recommendedClasses.isNotEmpty) {
+            debugPrint(
+              '✅ Found ${recommendations.recommendedClasses.length} personalized recommendations',
+            );
+            // Convert RecommendedClass to Map format
+            candidateClasses = recommendations.recommendedClasses.map((rec) {
+              return {
+                'class_name': rec.className,
+                'class_description': rec.classDescription,
+                'teacher_id': rec.teacherId,
+                'banner_picture': rec.bannerPicture,
+                'banner_picture_url': rec.bannerPicture,
+              };
+            }).toList();
+          } else {
+            debugPrint('ℹ️  No personalized matches, using remaining classes');
+            candidateClasses = recommendations.remainingClasses.map((rec) {
+              return {
+                'class_name': rec.className,
+                'class_description': rec.classDescription,
+                'teacher_id': rec.teacherId,
+                'banner_picture': rec.bannerPicture,
+                'banner_picture_url': rec.bannerPicture,
+              };
+            }).toList();
+          }
+        } catch (e) {
+          debugPrint('⚠️  Failed to fetch personalized recommendations: $e');
+          // Fall back to popular classes
+          candidateClasses = await api.getPopularClasses(limit: 8);
+        }
+      } else {
+        debugPrint('ℹ️  No learner ID, using popular classes');
+        // No learner ID - fall back to popular classes
+        candidateClasses = await api.getPopularClasses(limit: 8);
+      }
+
+      if (candidateClasses.isEmpty) {
         if (!mounted) return;
         setState(() => _recommendedClasses = []);
         return;
       }
 
       final now = DateTime.now();
-      final futures = popularCandidates.take(8).map((classData) async {
+      final futures = candidateClasses.take(8).map((classData) async {
         final dynamic idValue =
             classData['id'] ?? classData['ID'] ?? classData['class_id'];
         final classId = _asInt(idValue);
@@ -675,10 +730,13 @@ class _SearchPageState extends State<SearchPage> {
     // Clear in-memory cache to force fresh data
     _dataStore.clearCache();
 
+    // Clear recommendation cache to get fresh personalized recommendations
+    LearnerRecommendationService.instance.clearAllCache();
+
     // Force refresh popular classes
     await _loadPopularClasses(forceRefresh: true);
 
-    // Force refresh recommended sessions
+    // Force refresh recommended sessions (will fetch new personalized data)
     await _loadRecommendedSessions();
 
     // If there's a current search/filter, re-run it

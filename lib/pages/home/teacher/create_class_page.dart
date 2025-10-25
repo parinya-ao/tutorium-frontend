@@ -59,9 +59,10 @@ class _CreateClassPageState extends State<CreateClassPage> {
       final categories = await category_api.ClassCategory.fetchAll();
       final normalised =
           categories
+              .where((category) => category.id != null)
               .map(
                 (category) => _CategoryOption(
-                  id: category.id,
+                  id: category.id!,
                   name: category.classCategory.trim(),
                 ),
               )
