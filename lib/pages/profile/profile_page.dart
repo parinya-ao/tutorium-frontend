@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tutorium_frontend/pages/home/teacher/register/payment_screen.dart';
 import 'package:tutorium_frontend/pages/profile/all_classes_page.dart';
 import 'package:tutorium_frontend/pages/widgets/history_class.dart';
@@ -94,6 +95,46 @@ class _ProfilePageState extends State<ProfilePage> {
       debugPrint(
         "DEBUG ProfilePage: user id=${fetchedUser.id}, balance=${fetchedUser.balance}",
       );
+
+      // ===== Save user profile to LocalStorage for other pages to use =====
+      debugPrint('💾 Saving user profile to LocalStorage cache...');
+      try {
+        // Generate email from user data if not available
+        final userEmail = fetchedUser.studentId != null
+            ? '${fetchedUser.studentId}@student.ku.th'
+            : 'user${fetchedUser.id}@ku.th';
+
+        final profileData = {
+          'user_id': fetchedUser.id,
+          'first_name': fetchedUser.firstName ?? '',
+          'last_name': fetchedUser.lastName ?? '',
+          'email': userEmail,
+          'balance': fetchedUser.balance,
+          'profile_picture': fetchedUser.profilePicture,
+          'is_teacher': fetchedUser.teacher != null,
+          'student_id': fetchedUser.studentId,
+        };
+
+        await LocalStorage.saveUserProfile(profileData);
+        debugPrint('✅ User profile saved to cache');
+        debugPrint('   Name: ${fetchedUser.firstName} ${fetchedUser.lastName}');
+        debugPrint('   Email: $userEmail');
+
+        // Also save to SharedPreferences for backward compatibility
+        final prefs = await SharedPreferences.getInstance();
+        final fullName =
+            '${fetchedUser.firstName ?? ''} ${fetchedUser.lastName ?? ''}'
+                .trim();
+        if (fullName.isNotEmpty) {
+          await prefs.setString('userName', fullName);
+        }
+        await prefs.setString('userEmail', userEmail);
+        debugPrint(
+          '✅ Also saved to SharedPreferences (backward compatibility)',
+        );
+      } catch (e) {
+        debugPrint('⚠️ Failed to save user profile to cache: $e');
+      }
 
       await fetchClasses(fetchedUser);
     } on ApiException catch (e) {

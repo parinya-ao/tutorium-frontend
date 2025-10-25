@@ -168,6 +168,8 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
                 const SizedBox(height: 16),
                 _buildDescriptionCard(primaryColor),
                 const SizedBox(height: 16),
+                _buildMeetingLinkCard(primaryColor),
+                const SizedBox(height: 16),
                 _buildRequirementsCard(primaryColor),
                 const SizedBox(height: 100), // Space for floating button
               ],
@@ -531,6 +533,150 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
               color: Colors.grey.shade800,
               height: 1.5,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMeetingLinkCard(Color primaryColor) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [primaryColor.withValues(alpha: 0.1), Colors.white],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: primaryColor.withValues(alpha: 0.3),
+          width: 2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: primaryColor.withValues(alpha: 0.1),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [primaryColor, primaryColor.withValues(alpha: 0.7)],
+                  ),
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: [
+                    BoxShadow(
+                      color: primaryColor.withValues(alpha: 0.3),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.link_rounded,
+                  size: 24,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'ลิงก์ห้องเรียน',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: primaryColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade50,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey.shade200),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.videocam_rounded, size: 20, color: primaryColor),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        widget.jitsiMeetingUrl,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey.shade700,
+                          fontFamily: 'monospace',
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: _joinClass,
+                    icon: const Icon(Icons.play_arrow_rounded, size: 24),
+                    label: const Text(
+                      'เข้าห้องเรียนเลย',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: primaryColor,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 4,
+                      shadowColor: primaryColor.withValues(alpha: 0.4),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Icon(
+                Icons.info_outline_rounded,
+                size: 16,
+                color: Colors.grey.shade600,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'กดปุ่มด้านบนเพื่อเข้าห้องเรียนทันที',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.grey.shade600,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),

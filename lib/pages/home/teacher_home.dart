@@ -3,6 +3,7 @@ import 'package:tutorium_frontend/models/models.dart';
 import 'package:tutorium_frontend/pages/home/teacher/my_classes_page.dart';
 import 'package:tutorium_frontend/pages/home/teacher/create_class_page.dart';
 import 'package:tutorium_frontend/pages/home/teacher/create_session_page.dart';
+import 'package:tutorium_frontend/pages/home/teacher/teacher_withdraw_page.dart';
 import 'package:tutorium_frontend/pages/home/teacher/register/payment_screen.dart';
 import 'package:tutorium_frontend/service/users.dart' as user_api;
 import 'package:tutorium_frontend/pages/widgets/api_service.dart' as legacy_api;
@@ -356,9 +357,15 @@ class TeacherHomePageState extends State<TeacherHomePage> {
                 Icons.account_balance_wallet,
                 Colors.green,
                 () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Withdraw - Coming Soon')),
-                  );
+                  if (_teacherId != null) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            TeacherWithdrawPage(teacherId: _teacherId!),
+                      ),
+                    );
+                  }
                 },
               ),
             ),

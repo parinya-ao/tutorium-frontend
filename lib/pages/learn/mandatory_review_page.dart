@@ -62,31 +62,56 @@ class _MandatoryReviewPageState extends State<MandatoryReviewPage> {
               ),
             ),
             child: SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _buildHeader(theme),
-                    const SizedBox(height: 24),
-                    _buildClassCard(theme),
-                    const SizedBox(height: 20),
-                    _buildRatingSelector(theme),
-                    const SizedBox(height: 20),
-                    _buildCommentField(theme),
-                    if (_errorMessage != null) ...[
-                      const SizedBox(height: 16),
-                      _buildErrorBanner(),
-                    ],
-                    const Spacer(),
-                    if (widget.classSessionId != null &&
-                        widget.teacherId != null) ...[
-                      _buildReportButton(theme),
-                      const SizedBox(height: 12),
-                    ],
-                    _buildSubmitButton(theme),
-                  ],
-                ),
+              bottom: true,
+              child: Column(
+                children: [
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.only(
+                        left: 24,
+                        right: 24,
+                        top: 24,
+                        bottom: 16,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _buildHeader(theme),
+                          const SizedBox(height: 24),
+                          _buildClassCard(theme),
+                          const SizedBox(height: 20),
+                          _buildRatingSelector(theme),
+                          const SizedBox(height: 20),
+                          _buildCommentField(theme),
+                          if (_errorMessage != null) ...[
+                            const SizedBox(height: 16),
+                            _buildErrorBanner(),
+                          ],
+                          const SizedBox(height: 24),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.only(
+                      left: 24,
+                      right: 24,
+                      bottom: 24,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (widget.classSessionId != null &&
+                            widget.teacherId != null) ...[
+                          _buildReportButton(theme),
+                          const SizedBox(height: 12),
+                        ],
+                        _buildSubmitButton(theme),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -412,11 +437,141 @@ class _MandatoryReviewPageState extends State<MandatoryReviewPage> {
 
       Navigator.of(context).pop(true);
     } catch (e) {
+      if (!mounted) return;
+
+      String userFriendlyMessage;
+
+      // Check if it's a duplicate review error
+      final errorString = e.toString().toLowerCase();
+      if (errorString.contains('duplicate') ||
+          errorString.contains('unique') ||
+          errorString.contains('constraint') ||
+          (errorString.contains('500') &&
+              (errorString.contains('key') ||
+                  errorString.contains('violate')))) {
+        userFriendlyMessage =
+            '✅ คุณได้ส่งรีวิวสำหรับคลาสนี้ไปแล้ว!\nไม่สามารถส่งรีวิวซ้ำได้';
+
+        // Show success dialog for duplicate case
+        _showAlreadyReviewedDialog();
+        return;
+      } else if (errorString.contains('timeout') ||
+          errorString.contains('408')) {
+        userFriendlyMessage =
+            'การเชื่อมต่อหมดเวลา กรุณาตรวจสอบอินเทอร์เน็ตและลองอีกครั้ง';
+      } else if (errorString.contains('network') ||
+          errorString.contains('503')) {
+        userFriendlyMessage =
+            'ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้ กรุณาลองอีกครั้งภายหลัง';
+      } else if (errorString.contains('400')) {
+        userFriendlyMessage = 'ข้อมูลไม่ถูกต้อง กรุณาตรวจสอบและลองอีกครั้ง';
+      } else {
+        userFriendlyMessage = 'ส่งรีวิวไม่สำเร็จ กรุณาลองอีกครั้ง';
+      }
+
       setState(() {
-        _errorMessage = 'ส่งรีวิวไม่สำเร็จ: $e';
+        _errorMessage = userFriendlyMessage;
         _submitting = false;
       });
     }
+  }
+
+  void _showAlreadyReviewedDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.green.shade50,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(
+                Icons.check_circle_rounded,
+                color: Colors.green.shade600,
+                size: 32,
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'ส่งรีวิวแล้ว',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'คุณได้ส่งรีวิวสำหรับคลาส "${widget.className}" ไปเรียบร้อยแล้ว',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey.shade700,
+                height: 1.5,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.blue.shade100),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    color: Colors.blue.shade700,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'แต่ละคลาสสามารถรีวิวได้เพียงครั้งเดียวเท่านั้น',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.blue.shade700,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(context).pop(); // Close dialog
+              Navigator.of(context).pop(true); // Close review page
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green.shade600,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            child: const Text(
+              'เข้าใจแล้ว',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+        actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+        actionsAlignment: MainAxisAlignment.center,
+      ),
+    );
   }
 
   Future<void> _showReportDialog() async {
