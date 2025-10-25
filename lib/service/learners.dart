@@ -1,3 +1,4 @@
+import 'package:tutorium_frontend/models/recommendation_models.dart';
 import 'package:tutorium_frontend/service/api_client.dart';
 
 class Learner {
@@ -48,5 +49,53 @@ class Learner {
 
   static Future<void> delete(int id) async {
     await _client.delete('/learners/$id');
+  }
+
+  // Interests Management
+
+  /// Get a learner's interested class categories
+  /// GET /learners/{id}/interests
+  static Future<LearnerInterests> getInterests(int learnerId) async {
+    final response = await _client.getJsonMap('/learners/$learnerId/interests');
+    return LearnerInterests.fromJson(response);
+  }
+
+  /// Add categories to a learner's interests
+  /// POST /learners/{id}/interests
+  static Future<Learner> addInterests(
+    int learnerId,
+    List<int> classCategoryIds,
+  ) async {
+    final request = InterestRequest(classCategoryIds: classCategoryIds);
+    final response = await _client.postJsonMap(
+      '/learners/$learnerId/interests',
+      body: request.toJson(),
+    );
+    return Learner.fromJson(response);
+  }
+
+  /// Remove categories from a learner's interests
+  /// DELETE /learners/{id}/interests
+  static Future<Learner> removeInterests(
+    int learnerId,
+    List<int> classCategoryIds,
+  ) async {
+    final request = InterestRequest(classCategoryIds: classCategoryIds);
+    final response = await _client.deleteWithBody(
+      '/learners/$learnerId/interests',
+      body: request.toJson(),
+    );
+    return Learner.fromJson(response);
+  }
+
+  /// Get recommended classes for a learner based on their interests
+  /// GET /learners/{id}/recommended
+  static Future<RecommendedClassesResponse> getRecommendedClasses(
+    int learnerId,
+  ) async {
+    final response = await _client.getJsonMap(
+      '/learners/$learnerId/recommended',
+    );
+    return RecommendedClassesResponse.fromJson(response);
   }
 }

@@ -242,6 +242,30 @@ class ApiClient {
     }
   }
 
+  Future<Map<String, dynamic>> deleteWithBody(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
+    Object? body,
+  }) async {
+    final result = await delete(
+      path,
+      queryParameters: queryParameters,
+      headers: headers,
+      body: body,
+    );
+    if (result is Map<String, dynamic>) {
+      return result;
+    }
+    if (result == null) {
+      return <String, dynamic>{};
+    }
+    throw ApiException(
+      200,
+      'Expected a JSON object but received ${result.runtimeType}',
+    );
+  }
+
   String _formatNetworkMessage(String? message) {
     if (message == null) return 'Unable to reach the server';
     final trimmed = message.trim();
