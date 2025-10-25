@@ -592,14 +592,15 @@ class TeacherHomePageState extends State<TeacherHomePage> {
     const double size = 70;
     final imageUrl = classModel.bannerPicture;
 
-    if (imageUrl == null || imageUrl.isEmpty) {
-      return _buildClassThumbnailPlaceholder(size: size);
-    }
+    // Use Lorem Picsum with class ID as seed if no banner picture
+    final finalImageUrl = (imageUrl == null || imageUrl.isEmpty)
+        ? 'https://picsum.photos/seed/${classModel.id}/200/200'
+        : imageUrl;
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
       child: Image.network(
-        imageUrl,
+        finalImageUrl,
         width: size,
         height: size,
         fit: BoxFit.cover,
