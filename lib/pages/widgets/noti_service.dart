@@ -185,7 +185,7 @@ class NotificationService {
       case "class":
         return "CLASS UPDATE";
       case "system":
-        return "SYSTEM";
+        return "Admin";
       case "balance":
         return "BALANCE";
       case "password":
